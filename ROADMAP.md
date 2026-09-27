@@ -1,6 +1,6 @@
 # FocusLit roadmap
 
-更新：2026-09-27。**规划基线已建立；M0–M5 均未完成。**
+更新：2026-09-27。**M0 本地实现进行中；M0–M5 均未完成。**
 
 目标：用户说清当前任务后，一只安静的猫帮助识别并中止持续分心，同时保留资料检索、
 背景音乐和自主休息。第一版面向个人 macOS 使用，再达到可分发的私测质量。
@@ -9,7 +9,7 @@
 
 | 阶段 | 可见成果 | 退出门槛 | 状态 |
 | --- | --- | --- | --- |
-| M0 工程基础 | 可启动的安全桌面窗口，PR 自动检查 | 从干净 checkout 安装、测试、构建通过 | 未开始 |
+| M0 工程基础 | 可启动的安全桌面窗口，PR 自动检查 | 从干净 checkout 安装、测试、构建通过 | 本地进行中；CI 未运行 |
 | M1 平台验证 | 两个浏览器都能识别并受控关闭测试 tab；跨屏猫咪占位 | 实机桥接、安装/重启/断连证据，签名分发路径明确 | 未开始 |
 | M2 陪伴体验 | 猫咪 + 双语任务时段 + 音乐指定 + 休息 | 无 AI 也能完成舒服的完整时段 | 未开始 |
 | M3 确定性干预 | 规则提醒、倒计时、关闭与恢复链接 | 关键竞态、误关防护、重启恢复测试通过 | 未开始 |
@@ -23,14 +23,14 @@
 
 **Problem:** 明早开始后，任何行为变化都需要可重复检查，代码与文档不能各说各话。
 
-**Current behavior:** 只有规划文档；没有运行时代码或 CI。
+**Current behavior:** 已有最小时段窗口、状态机和本地检查；CI workflow 已创建但远程未运行。
 
-**Architecture:** npm workspaces；Electron/Vue/TS 桌面；独立纯 TS 核心与边界契约。
+**Architecture:** pnpm workspaces；Electron/Vue/TS 桌面；独立纯 TS 核心与边界契约。
 
 **Primary data/control flow:** 开发命令 → 相同 CI 命令 → 测试/构建产物。
 
-**Key decisions:** Node 24 LTS 的验证 patch、固定 npm、严格类型、根 lockfile；具体依赖在
-scaffold 时核对兼容性并记录。创建实际需要的 workspace，不先生成空服务。
+**Key decisions:** Node 24.21.0、pnpm 10.12.1、Electron 44.4.5、严格类型、根 lockfile；
+Forge 与 pnpm 使用 hoisted linker，并以真实 package 命令验证。创建实际需要的 workspace。
 
 **Alternatives rejected:** 多包管理器、依赖安装时取 latest、用框架数量证明工程完整性。
 
@@ -42,10 +42,10 @@ scaffold 时核对兼容性并记录。创建实际需要的 workspace，不先�
 
 **Tests and validation:**
 
-- [ ] 落实 README 的已支持脚本；格式、ESLint、TS/Vue 类型检查、Vitest 可执行。
-- [ ] 建立最小会话状态/协议行为测试，验证边界解码失败，不写无意义占位测试。
+- [x] 落实当前 README 脚本；格式、ESLint、TS/Vue 类型检查、Vitest 可执行。
+- [x] 建立最小会话状态/协议行为测试，验证边界解码失败。
 - [ ] PR 和 `dev`/`main` push 有 `quality` workflow；稳定的总 gate 不漏跑。
-- [ ] macOS 启动窗口和未签名打包 smoke；提交锁定版本/环境说明。
+- [x] 本地 macOS 启动窗口和未签名打包 smoke；版本/环境说明已写入待提交配置。
 - [ ] GitHub Actions 权限、分支保护、依赖更新和安全扫描按质量文档核实配置。
 
 **Observability:** CI 检查结果、版本清单和失败 artifact；不上传个人页面信息。
@@ -53,6 +53,15 @@ scaffold 时核对兼容性并记录。创建实际需要的 workspace，不先�
 **Known gaps:** 此阶段不证明 Safari、AI、猫咪设计或签名发布可用。
 
 **Interview challenge questions:** 为什么选 Electron？本地绿、CI 红如何定位？哪些依赖需要 macOS？
+
+**2026-09-27 本地进展（未完成里程碑）：** `pnpm check` 通过；`pnpm test:coverage`
+6 个测试通过，当前 core 分支覆盖率 100%（代码范围很小，不能代表后续策略安全）；固定
+Node 24.21.0 下 `pnpm package:mac` 生成未签名 arm64 `FocusLit.app`，本机打开后验证
+开始→暂停→继续→结束、中文/英文切换和浏览器“未连接”状态。机器为 macOS 26.6.2 arm64。
+实现提交为 `5f2d125`；临时干净目录的 frozen-lockfile 安装、`pnpm check` 和
+`pnpm test:coverage` 通过，未在该目录重新打包。CI 首跑、真实 git checkout、GitHub
+分支保护尚无证据；没有远程 artifact。
+应用尚无持久化、菜单栏、浏览器桥接或签名。API/CI 费用为零（未运行远程 job）。
 
 ## M1 — Safari、Chrome 与 macOS 可行性
 
