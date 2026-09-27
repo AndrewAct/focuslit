@@ -1,0 +1,34 @@
+{
+  "name": "focuslit",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": "24.21.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @focuslit/desktop dev",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p apps/desktop/tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "build": "pnpm --filter @focuslit/desktop build",
+    "package:mac": "pnpm --filter @focuslit/desktop package:mac"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@types/node": "24.10.13",
+    "@vitest/coverage-v8": "5.0.2",
+    "eslint": "9.39.1",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.1",
+    "vite": "8.3.1",
+    "vitest": "5.0.2",
+    "vue-tsc": "3.3.11"
+  }
+}

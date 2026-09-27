@@ -2,3 +2,9 @@ docs
 AGENTS.md
 CLAUDE.md
 
+node_modules/
+.vite/
+out/
+dist/
+coverage/
+.DS_Store

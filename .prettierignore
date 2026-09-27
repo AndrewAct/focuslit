@@ -1,0 +1,12 @@
+node_modules
+.vite
+out
+dist
+coverage
+pnpm-lock.yaml
+docs
+AGENTS.md
+CLAUDE.md
+README.md
+ROADMAP.md
+.github
