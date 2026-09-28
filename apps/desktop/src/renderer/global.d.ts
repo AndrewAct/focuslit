@@ -6,6 +6,10 @@ declare global {
       getSession(): Promise<SessionViewDto>;
       command(command: SessionCommand): Promise<SessionViewDto>;
       onSessionChanged(callback: (view: SessionViewDto) => void): () => void;
+      setWindowMode(
+        mode: "collapsed" | "collapsed-timer" | "expanded",
+      ): Promise<void>;
+      moveBy(dx: number, dy: number): void;
     };
   }
 }

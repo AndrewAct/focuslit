@@ -25,6 +25,14 @@ const api = {
     ipcRenderer.on("session:changed", listener);
     return () => ipcRenderer.removeListener("session:changed", listener);
   },
+  setWindowMode: async (
+    mode: "collapsed" | "collapsed-timer" | "expanded",
+  ): Promise<void> => {
+    await ipcRenderer.invoke("window:setMode", mode);
+  },
+  moveBy: (dx: number, dy: number): void => {
+    ipcRenderer.send("window:moveBy", dx, dy);
+  },
 };
 
 contextBridge.exposeInMainWorld("focuslit", api);

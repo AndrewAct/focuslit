@@ -1,15 +1,23 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #292524;
-  background: #faf7f2;
   font-synthesis: none;
 }
 
 * {
   box-sizing: border-box;
 }
-body {
+html,
+body,
+#app {
+  height: 100%;
   margin: 0;
+  background: transparent;
+  /* Dragging the cat is a pointer gesture over plain text/divs, not a text
+     selection — without this, WebKit highlights everything it passes over
+     in its default selection blue. Form controls are exempt by spec. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 button,
 input {
@@ -24,30 +32,49 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
-.panel {
-  min-height: 100vh;
-  padding: 24px;
+.stage {
+  height: 100%;
+  display: flex;
+}
+.surface {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+.surface:not(.card) {
+  align-items: center;
+  justify-content: center;
+}
+.surface.card {
+  padding: 20px 22px 16px;
+  background: #faf7f2;
+  border-radius: 16px;
+  box-shadow:
+    0 12px 28px #29252433,
+    0 2px 6px #29252422;
+  overflow-y: auto;
 }
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 4px;
 }
 .brand {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
-.language {
+.toggle-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 3px;
   padding: 3px;
   border-radius: 10px;
   background: #ece7e0;
 }
-.language button {
+.toggle-group button {
   border: 0;
   border-radius: 7px;
   padding: 5px 8px;
@@ -55,82 +82,74 @@ input:focus-visible {
   background: transparent;
   font-size: 12px;
 }
-.language button[aria-pressed="true"] {
+.toggle-group button[aria-pressed="true"] {
   color: #292524;
   background: #fffdf9;
   box-shadow: 0 1px 3px #29252420;
 }
+.duration-input {
+  width: 64px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
 
-.cat-stage {
-  flex: 1;
-  min-height: 195px;
+.cat-wrap {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: pointer;
+}
+.cat-wrap:focus {
+  outline: none;
+}
+.cat-wrap:focus-visible {
+  outline: 3px solid #8a541f;
+  outline-offset: 2px;
+}
+.surface.card .cat-wrap {
+  width: auto;
+  height: auto;
+  margin-bottom: 6px;
 }
 .cat {
-  width: 118px;
-  height: 108px;
-  position: relative;
+  display: block;
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
-.cat-ear {
-  position: absolute;
-  top: 2px;
-  width: 35px;
-  height: 50px;
-  border: 3px solid #554b44;
-  background: #e8d7bf;
-  transform: rotate(-23deg);
-  border-radius: 8px 80% 0 0;
+.cat.small {
+  width: 72px;
+  height: 72px;
 }
-.cat-ear.left {
-  left: 11px;
-}
-.cat-ear.right {
-  right: 11px;
-  transform: scaleX(-1) rotate(-23deg);
-}
-.cat-face {
-  position: absolute;
-  inset: 22px 2px 0;
-  border: 3px solid #554b44;
-  background: #f1e4d1;
-  border-radius: 50%;
-}
-.eye {
-  position: absolute;
-  top: 39px;
-  width: 7px;
-  height: 10px;
-  background: #554b44;
-  border-radius: 50%;
-}
-.eye.left {
-  left: 31px;
-}
-.eye.right {
-  right: 31px;
-}
-.nose {
-  position: absolute;
-  left: 50%;
-  top: 56px;
-  width: 8px;
-  height: 5px;
-  transform: translateX(-50%);
-  background: #b86638;
-  border-radius: 50%;
-}
-.placeholder {
-  margin: 13px 0 0;
+.hint {
+  margin: 6px 0 0;
   color: #68615b;
   font-size: 11px;
+  pointer-events: none;
+}
+.floating-timer {
+  margin: 4px 0 0;
+  color: #292524;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  pointer-events: none;
+  /* Collapsed mode sits directly on the desktop wallpaper, not a card, so
+     legibility can't depend on a known background — a soft halo keeps the
+     digits readable over light or dark photos either way. */
+  text-shadow:
+    0 1px 3px #fffdf9cc,
+    0 0 8px #fffdf999;
 }
 
-.session {
-  min-height: 224px;
-}
 .eyebrow {
   color: #8a541f;
   font-size: 13px;
@@ -203,6 +222,19 @@ input::placeholder {
   color: #8a541f;
   font-size: 13px;
 }
+.timer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: #68615b;
+  font-size: 11px;
+  font-weight: 400;
+}
+.timer-toggle input {
+  width: auto;
+  margin: 0;
+}
 footer {
   border-top: 1px solid #e4ded6;
   padding-top: 16px;
@@ -221,30 +253,22 @@ footer {
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f4eee7;
+  }
+  .surface.card {
     background: #252321;
   }
-  .language {
+  .toggle-group {
     background: #3d3834;
   }
-  .language button {
+  .toggle-group button {
     color: #ded4ca;
   }
-  .language button[aria-pressed="true"] {
+  .toggle-group button[aria-pressed="true"] {
     background: #62564d;
     color: #fff;
   }
-  .cat-ear {
-    border-color: #d8c5b5;
-    background: #bca993;
-  }
-  .cat-face {
-    border-color: #d8c5b5;
-    background: #cbb9a3;
-  }
-  .eye {
-    background: #433c37;
-  }
-  .placeholder,
+  .hint,
+  .timer-toggle,
   footer {
     color: #d1c5b8;
   }

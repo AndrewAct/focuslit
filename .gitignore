@@ -1,6 +1,8 @@
 docs
 AGENTS.md
 CLAUDE.md
+blog_ideas
+/assets/
 
 node_modules/
 .vite/
