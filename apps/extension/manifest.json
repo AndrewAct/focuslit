@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "FocusLit Bridge (dev)",
+  "version": "0.1.0",
+  "description": "M1 development bridge: reports only the FocusLit test page's URL/title to the desktop app over native messaging. The explicit test control may close that same test tab; no other tab is read or closed.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhm5fWhs222XtaqeU6kKlHExnLfTjVYhLveYZkt88v+kgAupzGjHrnDqaxrCIrT2trAlFRuqxu+XQ6gUkJlkpT+3PTZ64ldA+Qh0lyLcbbVtp4FG1955dNTP6HN/qMpPVEEpTyVNoF1NflCcLGPfu2WZ+GDYVNil0JdwusnagLiZLkkYcLS7tjdtG9TeCXXSKFMaqtDhJZOGK9OyEDkS/OB5/TJaselkBiQzEWbxo4Bkj2YptMC4gbr8oW8rGnTvTXlMQ4zsJDaPLJKiP0Yiy7Ly7xo51rER6C5IBWSzAQDNibksUi9K401vtYDL3DqHyyjmiCGQG0c7kRV181K4JFQIDAQAB",
+  "permissions": ["tabs", "nativeMessaging", "storage"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "minimum_chrome_version": "116"
+}
