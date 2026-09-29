@@ -26,20 +26,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasPresentedBridgeWindow = true
 
         // The generated storyboard does not reliably load its Swift controller
-        // outside Xcode. Own the development-status window directly after the
-        // app's restoration cycle, which otherwise revives its old blank view.
-        let restoredWindows = NSApplication.shared.windows
-        let window = restoredWindows.first ?? NSWindow(
+        // outside Xcode. Do not reuse a restored window: it can carry the old
+        // storyboard's blank content view. Closing every restored window makes
+        // this development-only status surface deterministic on every launch.
+        NSApplication.shared.windows.forEach { $0.close() }
+
+        let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 425, height: 325),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        restoredWindows.dropFirst().forEach { $0.close() }
         window.center()
         window.contentViewController = ViewController()
         window.title = "FocusLit Safari Bridge"
         window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
         self.window = window
     }
 

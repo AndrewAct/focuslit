@@ -23,11 +23,17 @@ function sendNativeMessage(message) {
   });
 }
 
-async function reportActiveTestPage() {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.url || !isFocusLitTestPageUrl(tab.url)) return;
+function setActionFeedback(title) {
+  return browser.action.setTitle({ title });
+}
 
-  await sendNativeMessage({
+async function reportTestPageAfterUserAction(tab) {
+  if (!tab?.url || !isFocusLitTestPageUrl(tab.url)) {
+    await setActionFeedback("Open the FocusLit local fixture page first");
+    return;
+  }
+
+  const response = await sendNativeMessage({
     type: "safariTabObserved",
     protocolVersion: PROTOCOL_VERSION,
     messageId: crypto.randomUUID(),
@@ -39,23 +45,32 @@ async function reportActiveTestPage() {
     title: tab.title ?? "",
     observedAtMs: Date.now(),
   });
+
+  if (
+    !response ||
+    response.type !== "safariWelcome" ||
+    response.protocolVersion !== PROTOCOL_VERSION
+  ) {
+    throw new Error("native handler rejected the fixture message");
+  }
+
+  await setActionFeedback("Fixture message accepted");
 }
 
-browser.tabs.onActivated.addListener(() => {
-  void reportActiveTestPage().catch((error) =>
-    console.warn("[focuslit-safari] native message failed", error),
-  );
-});
+// The prior development build showed an OK/! badge as a test-only receipt.
+// Clear any badge left by it: persistent toolbar decoration is not part of
+// FocusLit's quiet-companion UI.
+void browser.action.setBadgeText({ text: "" });
 
-browser.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
-  if (
-    !tab.active ||
-    (changeInfo.status !== "complete" &&
-      changeInfo.title === undefined &&
-      changeInfo.url === undefined)
-  )
-    return;
-  void reportActiveTestPage().catch((error) =>
-    console.warn("[focuslit-safari] native message failed", error),
+// Apple grants activeTab only after an explicit extension action. The M1
+// experiment therefore cannot inspect tabs as the user switches or browses;
+// it can inspect just the tab Safari hands to this click handler, and only
+// sends it if it is our harmless local fixture.
+browser.action.onClicked.addListener((tab) => {
+  void reportTestPageAfterUserAction(tab).catch(
+    () =>
+      // No URL, title, or native error detail reaches browser-visible output.
+      // Keep the outcome to an on-hover label, not a persistent decoration.
+      void setActionFeedback("Fixture message was not accepted"),
   );
 });

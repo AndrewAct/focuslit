@@ -28,4 +28,20 @@ describe("Safari extension sources", () => {
       );
     }
   });
+
+  it("asks only for a user-invoked active tab, never background tab access", () => {
+    const manifest = JSON.parse(
+      readFileSync(join(source, "manifest.json"), "utf8"),
+    );
+    const background = readFileSync(join(source, "background.js"), "utf8");
+
+    expect(manifest.permissions).toEqual(["activeTab", "nativeMessaging"]);
+    expect(manifest.action).toEqual({
+      default_title: "Send FocusLit fixture message",
+    });
+    expect(background).toContain("browser.action.onClicked.addListener");
+    expect(background).not.toContain("browser.tabs.");
+    expect(background).not.toContain('setBadgeText({ text: "OK" })');
+    expect(background).not.toContain('setBadgeText({ text: "!" })');
+  });
 });
