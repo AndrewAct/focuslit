@@ -196,7 +196,9 @@ Node 24.21.0 下 `pnpm package:mac` 生成未签名 arm64 `FocusLit.app`，本�
 **Problem:** 用户依赖两个浏览器；开发态可读 URL 不代表打包后可用，更不代表能安全关 tab。
 
 **Current behavior:** Chrome 只读连接 + 指定测试 tab 关闭实验已在真实 Chrome 验证通过（见下方
-2026-09-28 本地进展）；Safari 完全未实现。距离两浏览器都满足本阶段退出门槛还很远。
+2026-09-28 本地进展）。Safari 已有 Apple Development 签名的 Xcode Debug 容器与只读测试页消息
+代码，但尚未完成容器 UI 人工验收、安装/启用、真实 Safari 消息或 Electron 连通；距离两浏览器都
+满足本阶段退出门槛还很远。
 
 **Architecture:** 共享 TS 扩展逻辑 + 分平台 manifest；Chrome native messaging host；Safari
 Xcode 容器/原生扩展 + 桌面桥接；实际进程拓扑在本阶段决策记录中锁定。
@@ -271,10 +273,43 @@ hello/welcome 握手、footer 从 not-installed → pending → connected 的真
 - 换页保护：把测试页 tab 导航到 google.com 后点击关闭，返回 `navigationMismatch`，
   Google 页面原样保留，没有被误关。
 
+**Safari 2026-09-28 本地进展（未完成里程碑）：** 使用 Xcode 26.1.1 的
+`safari-web-extension-packager` 创建了 macOS-only 容器 `com.andreweats.focuslit.safari` 和内嵌
+extension `com.andreweats.focuslit.safari.Extension`。先运行了 `CODE_SIGNING_ALLOWED=NO` 的 Debug
+编译；经 Andrew 明确授权后，又以 Xcode automatic signing 成功生成 Apple Development 签名的 Debug
+app，并用 `codesign --verify --deep --strict` 验证容器和嵌入 extension。两 target 均为 App Sandbox，
+没有网络 entitlement。该产物只在本机临时 DerivedData 下，未公证、未分发；也不构成 Safari 安装或
+桥接验证。扩展仅在本地 `file:///.../focuslit-safari-test-page/...` fixture 成为当前
+页面时上报；原生 handler 对协议版本、UUID、页面 ID、长度及 fixture URL 做验证，只记录随机
+message ID、不持久化 URL/标题、不拥有关闭 tab 权限。Safari JS → native 的实际消息、Safari
+权限/重启、以及 native container → Electron 的受认证 IPC 仍全未验证；不得把 Chrome 的本地
+socket 授权模型照搬为 Safari 最终方案。manifest 尚未配置正式 icons；这是开发测试容器，不能发布。
+
+**Safari 容器 UI 调试记录（未通过）：** Xcode packager 的默认 storyboard/WebView 在实际启动时只
+显示空白窗口。随后把容器改为 AppKit 原生状态页，并移除了 storyboard 启动项；macOS 仍会恢复此前
+保存的空白开发窗口。当前 `AppDelegate` 延后 250 ms 后直接替换恢复窗口的 `contentViewController`，
+并移除了启动时的 `SFSafariExtensionManager` 状态查询，避免让 Safari 通信阻塞首帧。每次修改后的
+Apple Development 签名 Debug build 都通过，但自动化窗口观察器对最新实例超时，未获得修复后实际
+界面的可见证据。下一步应从 Xcode 的 Run 直接启动这一 target 并人工确认原生文字与“Open Safari
+Extensions Settings…”按钮；在此之前不得打开 Safari 设置、更不得启用 extension。该 UI 问题和
+原生消息/desktop IPC 是独立的，后两者尚未开始。
+
+**Safari 构建与交接定位（2026-09-28）：** 最新通过签名验证的产物是独立的开发容器
+`/private/tmp/focuslit-safari-signed-derived/Build/Products/Debug/FocusLitSafari.app`，不是桌宠
+Electron app 的组成部分，也没有被复制到 `/Applications`。Spotlight 打开的 `FocusLit.app` 是
+`apps/desktop/out/FocusLit-darwin-arm64/FocusLit.app`；它最后一次打包时间为当天 14:44，不能显示
+任何 Safari 容器 UI 或 Safari 扩展改动。因此“Spotlight 中看不到 Safari 改动”是当前架构下的
+预期结果，不是 Safari build 未通过。下次直接从 Xcode 打开
+`native/macos/safari/project/FocusLitSafari/FocusLitSafari.xcodeproj`，选择 `FocusLitSafari` scheme
+并 Run；先人工确认原生状态文案和 Settings 按钮可见。只有在该 UI 已确认且 Andrew 当时再次明确
+同意后，才可打开 Safari Extensions Settings 并启用扩展。之后才验证 fixture 消息，再另行设计
+container → Electron 的受认证 IPC；不能把临时 DerivedData app 当作已集成、可发布的桌宠 build。
+
 **没有验证的部分，不能算通过：** 过期命令（`expiresAtMs` 超时）没有做真实的延迟触发测试，
 只是代码逻辑上有这个分支；MV3 service worker 真正 idle 30 秒后休眠再唤醒重连没有独立测试过
 （测试过的是桌面应用整进程重启后重连，机制上相关但不是同一件事）；SPA 内容变化重新上报没测；
-多窗口/多 profile 没测；Safari 完全没有开始，容器/签名/权限引导都是空白。当前 `pnpm check`、
+多窗口/多 profile 没测；Safari 尚无 UI 人工验收、安装/启用、真实消息或权限引导证据，不能据
+容器/签名代码宣称已连通。当前 `pnpm check`、
 `pnpm test`（18 个测试，含协议、socket authority 与测试页 scope 用例）、`pnpm build:extension` 全部通过；
 working tree 未提交，等 Andrew 确认后再决定是否 commit。本次未产生 API/云成本。
 
