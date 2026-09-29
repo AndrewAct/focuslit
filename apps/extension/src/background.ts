@@ -20,6 +20,9 @@ let connectionEpoch = "";
 let profileIdPromise: Promise<string> | null = null;
 let browserInstanceIdPromise: Promise<string> | null = null;
 const navigationSeqByTab = new Map<number, number>();
+const RECONNECT_DELAY_MS = 2000;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let versionRejected = false;
 
 // Persists across service-worker sleep/wake (chrome.storage.local survives
 // full browser restarts too) — this is "the same Chrome profile" identity.
@@ -62,6 +65,7 @@ function getPort(): chrome.runtime.Port {
       );
     }
     port = null;
+    scheduleReconnect();
   });
   nextPort.onMessage.addListener((raw: unknown) => {
     const result = bridgeOutboundMessageSchema.safeParse(raw);
@@ -78,8 +82,32 @@ function getPort(): chrome.runtime.Port {
   return nextPort;
 }
 
+// The native host exits whenever Chrome closes the port (and the desktop app
+// may restart), so nothing else would ever reopen it until the next tab event.
+function scheduleReconnect() {
+  if (versionRejected || reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = undefined;
+    getPort();
+  }, RECONNECT_DELAY_MS);
+}
+
+// The desktop app forgets the last observation on every new handshake, so
+// report the active tab again once it welcomes us.
+function reportActiveTab() {
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+    const tab = tabs?.[0];
+    if (tab) void reportIfTestPage(tab);
+  });
+}
+
 function handleOutbound(message: BridgeOutboundMessage) {
+  if (message.type === "welcome") {
+    reportActiveTab();
+    return;
+  }
   if (message.type === "versionRejected") {
+    versionRejected = true;
     console.error(
       `[focuslit] desktop app rejected protocol v${BRIDGE_PROTOCOL_VERSION}; ` +
         `it supports v${message.supportedProtocolVersion}. Not retrying.`,
@@ -237,3 +265,7 @@ chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   navigationSeqByTab.delete(tabId);
 });
+
+// Open the port as soon as the worker starts (browser launch, extension
+// reload, wake-up) rather than waiting for the first test-page event.
+getPort();

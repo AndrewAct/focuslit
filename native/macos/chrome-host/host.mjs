@@ -43,6 +43,10 @@ let reconnectTimer = null;
 // dropping so a hello arriving early isn't silently lost. Bounded so a
 // desktop app that never comes up can't grow this unboundedly.
 let pendingOutbound = [];
+// The extension sends "hello" once per Chrome port. If the desktop app
+// restarts, this process reconnects to a brand-new server that has never seen
+// that hello, so replay it first on every (re)connection.
+let helloMessage = null;
 const MAX_PENDING_OUTBOUND = 50;
 
 function writeToChrome(message) {
@@ -88,6 +92,9 @@ function connectSocket() {
   s.on("connect", () => {
     socket = s;
     process.stderr.write("[focuslit-host] connected to desktop app\n");
+    if (helloMessage && !pendingOutbound.includes(helloMessage)) {
+      socket.write(`${JSON.stringify(helloMessage)}\n`);
+    }
     for (const message of pendingOutbound) {
       socket.write(`${JSON.stringify(message)}\n`);
     }
@@ -120,6 +127,7 @@ function connectSocket() {
 }
 
 readFromChrome((message) => {
+  if (message && message.type === "hello") helloMessage = message;
   if (!socket) {
     // Desktop app isn't reachable yet, or (see pendingOutbound comment
     // above) the connection is still in flight. "hello" in particular must

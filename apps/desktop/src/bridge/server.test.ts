@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BRIDGE_PROTOCOL_VERSION } from "@focuslit/contracts";
@@ -16,7 +17,7 @@ afterEach(() => {
 });
 
 function createBridge() {
-  const userDataDir = mkdtempSync("/private/tmp/focuslit-bridge-");
+  const userDataDir = mkdtempSync(join(tmpdir(), "focuslit-bridge-"));
   tempDirs.push(userDataDir);
   const bridge = new BridgeServer(userDataDir, () => {});
   bridge.start();
