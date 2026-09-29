@@ -1,6 +1,6 @@
 # FocusLit roadmap
 
-更新：2026-09-27。**M0 本地实现进行中；M2 桌宠核心交互本地进行中；M0–M5 均未完成。** 当天首次桌面截图收到明确的产品体验否定反馈，随后同一天内实现并经 Andrew 实机验收了真实透明桌宠窗口；下述修正与进展是后续实现和验收依据。
+更新：2026-09-29。**M0 本地实现进行中；M1 平台验证本地进行中；M2 桌宠核心交互本地进行中；M0–M5 均未完成。** 当天首次桌面截图收到明确的产品体验否定反馈，随后同一天内实现并经 Andrew 实机验收了真实透明桌宠窗口；下述修正与进展是后续实现和验收依据。
 
 目标：用户说清当前任务后，一只安静的猫帮助识别并中止持续分心，同时保留资料检索、
 背景音乐和自主休息。第一版面向个人 macOS 使用，再达到可分发的私测质量。
@@ -10,7 +10,7 @@
 | 阶段 | 可见成果 | 退出门槛 | 状态 |
 | --- | --- | --- | --- |
 | M0 工程基础 | 可启动的安全桌面窗口，PR 自动检查 | 从干净 checkout 安装、测试、构建通过 | 本地进行中；CI 未运行 |
-| M1 平台验证 | Safari/Chrome 真实连接与状态引导；桌面猫咪跨屏窗口验证 | 实机桥接、权限/重启/断连、指定测试 tab 关闭证据，签名分发路径明确 | 未开始 |
+| M1 平台验证 | Safari/Chrome 真实连接与状态引导；桌面猫咪跨屏窗口验证 | 实机桥接、权限/重启/断连、指定测试 tab 关闭证据，签名分发路径明确 | 本地进行中：Chrome 实验已验证；Safari 的本地 fixture → native 容器已实机验证，尚未接入 Electron |
 | M2 陪伴体验 | 默认布偶猫气质桌宠、点击展开操作、首次语言选择、音乐与休息 | 经用户认可的猫咪造型；无 AI 也能完成舒服的完整时段 | 本地进行中：透明桌宠窗口/拖拽/点击展开/时长选择已验收；表情/模板/音乐/首启语言/菜单栏未完成 |
 | M3 确定性干预 | 规则提醒、倒计时、关闭与恢复链接 | 关键竞态、误关防护、重启恢复测试通过 | 未开始 |
 | M4 语义与预算 | OpenAI/Anthropic 可选接入，先观察再启用干预 | 固定评估集、实用成本账本、错误降级通过 | 未开始 |
@@ -81,6 +81,33 @@ Spotlight 对深埋在 `~/dev/focuslit/apps/desktop/out/...` 里的 `.app` 短�
    用户主动交互（点击/悬停）的短暂响应，事件驱动、有明确开始和结束，不是常驻循环动画。
    实现前需要先出角色母版的舔毛姿势/动作稿供 Andrew 审阅，遵循与陪伴表情稿相同的"先出
    对照图/短录屏再接入应用"流程，不要直接跳正式资产或动画代码。
+
+## 2026-09-28 本地进展：M2 长时段小动作已接入并完成新包
+
+Andrew 提出桌宠在较长的专注时段也应偶尔有一点生气；确认的规则是：**进行中的 session 满 10
+分钟后做一次短暂动作，之后每 5–10 分钟活动专注时间随机做一次**。这不是连续动画或 idle
+判定，也不会抢焦点。随机动作候选为已有的舔毛、哈欠与耳朵轻摆；只要选中耳朵，左右耳就按上次
+方向轮换，避免重复同侧而显得机械。面板展开时不播随机动作；暂停/睡眠不累计，恢复后不会补发
+遗漏的多次动作，渲染延迟最多只播一次后重新从当前活动时间安排下一次。
+
+**已批准的美术与来源：** Andrew 已在 128 px 看过并认可 `focuslit-cat-yawning-v1.png`、
+`focuslit-cat-ear-wiggle-v1.png`（左耳）和 `focuslit-cat-ear-wiggle-right-v1.png`（右耳）。它们
+用获批准的 `assets/focuslit-cat-happy-v1.png` 作 identity anchor、由 Codex 内置 ImageGen 生成，
+透明背景、无第三方角色/素材；根 `assets/` 保留审阅源稿，渲染层副本在
+`apps/desktop/src/renderer/assets/cat/`。这些资产和本次代码仍是本地未提交材料，若将来要追踪/
+公开，先按 AGENTS.md 决定资产许可与仓库范围。
+
+**实现和验证：** `packages/core/src/companion-actions.ts` 保持调度为可注入随机源的纯函数；
+`companion-actions.test.ts` 覆盖 10 分钟阈值、5–10 分钟上/下界、暂停不触发、渲染延迟不补发和
+耳朵方向轮换。`App.vue` 按 session 的活动累计时长消费结果并映射到静态动作图；`style.css` 只做
+一次性淡入/缩放，Reduced Motion 退回静态姿态。使用 Node 24.21.0 的 `pnpm test`（24 passed）和
+`pnpm check` 均通过；`pnpm package:mac` 成功生成新的 arm64 未签名
+`apps/desktop/out/FocusLit-darwin-arm64/FocusLit.app`，并核对其 `app.asar` 含三张新动作 PNG。
+无新增运行时网络、云服务或 API 成本；代价是三张静态透明 PNG 增加包体积，尚未测量最终包增量。
+
+**未完成边界：** 尚未在真实桌面连续运行超过 10 分钟以确认频率、打断感与点击/拖拽不受影响；
+也没有完成签名、公证或发布。动作功能不代表 M2 已完成，六态的其余表情、首启语言、菜单栏、
+音乐、休息与桌面礼仪验收仍按原退出门槛推进。
 
 ## 2026-09-27 代码复核后的优先级与开工入口
 
@@ -196,7 +223,9 @@ Node 24.21.0 下 `pnpm package:mac` 生成未签名 arm64 `FocusLit.app`，本�
 **Problem:** 用户依赖两个浏览器；开发态可读 URL 不代表打包后可用，更不代表能安全关 tab。
 
 **Current behavior:** Chrome 只读连接 + 指定测试 tab 关闭实验已在真实 Chrome 验证通过（见下方
-2026-09-28 本地进展）；Safari 完全未实现。距离两浏览器都满足本阶段退出门槛还很远。
+2026-09-28 本地进展）。Safari 的 Apple Development 签名 Debug 容器已在实机启用；用户明确点击
+工具栏 action 后，限定本地 fixture 页成功完成 Safari extension → native handler 往返。它没有读取
+其他页面、没有关闭 tab、没有 Electron 连通或应用内连接状态，因此距离 M1 退出门槛仍很远。
 
 **Architecture:** 共享 TS 扩展逻辑 + 分平台 manifest；Chrome native messaging host；Safari
 Xcode 容器/原生扩展 + 桌面桥接；实际进程拓扑在本阶段决策记录中锁定。
@@ -271,11 +300,57 @@ hello/welcome 握手、footer 从 not-installed → pending → connected 的真
 - 换页保护：把测试页 tab 导航到 google.com 后点击关闭，返回 `navigationMismatch`，
   Google 页面原样保留，没有被误关。
 
+**Safari 2026-09-28 本地进展（未完成里程碑）：** 使用 Xcode 26.1.1 的
+`safari-web-extension-packager` 创建了 macOS-only 容器 `com.andreweats.focuslit.safari` 和内嵌
+extension `com.andreweats.focuslit.safari.Extension`。先运行了 `CODE_SIGNING_ALLOWED=NO` 的 Debug
+编译；经 Andrew 明确授权后，又以 Xcode automatic signing 成功生成 Apple Development 签名的 Debug
+app，并用 `codesign --verify --deep --strict` 验证容器和嵌入 extension。两 target 均为 App Sandbox，
+没有网络 entitlement。该产物只在本机临时 DerivedData 下，未公证、未分发；也不构成 Safari 安装或
+桥接验证。扩展仅在本地 `file:///.../focuslit-safari-test-page/...` fixture 成为当前
+页面时上报；原生 handler 对协议版本、UUID、页面 ID、长度及 fixture URL 做验证，只记录随机
+message ID、不持久化 URL/标题、不拥有关闭 tab 权限。Safari JS → native 的实际消息、Safari
+权限/重启、以及 native container → Electron 的受认证 IPC 仍全未验证；不得把 Chrome 的本地
+socket 授权模型照搬为 Safari 最终方案。manifest 尚未配置正式 icons；这是开发测试容器，不能发布。
+
+**Safari 容器 UI 调试记录（未通过）：** Xcode packager 的默认 storyboard/WebView 在实际启动时只
+显示空白窗口。随后把容器改为 AppKit 原生状态页，并移除了 storyboard 启动项；macOS 仍会恢复此前
+保存的空白开发窗口。当前 `AppDelegate` 延后 250 ms 后直接替换恢复窗口的 `contentViewController`，
+并移除了启动时的 `SFSafariExtensionManager` 状态查询，避免让 Safari 通信阻塞首帧。每次修改后的
+Apple Development 签名 Debug build 都通过，但自动化窗口观察器对最新实例超时，未获得修复后实际
+界面的可见证据。下一步应从 Xcode 的 Run 直接启动这一 target 并人工确认原生文字与“Open Safari
+Extensions Settings…”按钮；在此之前不得打开 Safari 设置、更不得启用 extension。该 UI 问题和
+原生消息/desktop IPC 是独立的，后两者尚未开始。
+
+**Safari 构建与交接定位（2026-09-28）：** 最新通过签名验证的产物是独立的开发容器
+`/private/tmp/focuslit-safari-signed-derived/Build/Products/Debug/FocusLitSafari.app`，不是桌宠
+Electron app 的组成部分，也没有被复制到 `/Applications`。Spotlight 打开的 `FocusLit.app` 是
+`apps/desktop/out/FocusLit-darwin-arm64/FocusLit.app`；它最后一次打包时间为当天 14:44，不能显示
+任何 Safari 容器 UI 或 Safari 扩展改动。因此“Spotlight 中看不到 Safari 改动”是当前架构下的
+预期结果，不是 Safari build 未通过。下次直接从 Xcode 打开
+`native/macos/safari/project/FocusLitSafari/FocusLitSafari.xcodeproj`，选择 `FocusLitSafari` scheme
+并 Run；先人工确认原生状态文案和 Settings 按钮可见。只有在该 UI 已确认且 Andrew 当时再次明确
+同意后，才可打开 Safari Extensions Settings 并启用扩展。之后才验证 fixture 消息，再另行设计
+container → Electron 的受认证 IPC；不能把临时 DerivedData app 当作已集成、可发布的桌宠 build。
+
+**Safari 2026-09-29 实机验证（未完成里程碑）：** 在 Safari Extensions Settings 中移除了旧的开发
+容器并启用了一个新签名 Debug 容器；旧 `.app` 仅移入废纸篓，仍可恢复。此前 `tabs` 权限会导致
+Safari 警告扩展可查看所有访问网站的历史；为避免这个过宽授权，开发 manifest 改为仅
+`activeTab` + `nativeMessaging`，没有 host permissions，也没有后台 tab 监听。扩展只在用户显式点击
+工具栏 action 时接收 Safari 交给它的当前 tab，并且只接受本地
+`file:///.../focuslit-safari-test-page/index.html` fixture。实机点击后 action 的仅悬停标题变为
+`Fixture message accepted`，证明 extension → native handler 的消息和回执真实往返；Safari 设置也
+显示为仅在使用扩展时读取当前标签页，而不是所有网站历史。临时 `OK`/`!` 角标被用户认为干扰，已在
+同日构建中移除并主动清空旧 badge，保留无常驻视觉装饰的悬停反馈。最终 Debug app 已重建并通过
+`codesign --verify --deep --strict`；`pnpm test`（25 项）、`pnpm check` 与 `git diff --check` 通过。
+该证据只覆盖受限 fixture 的 extension → container 消息，**不代表** Safari 对普通页面的监测、关闭
+tab、权限撤销/重启/断连恢复、Safari → Electron IPC、分发安装或 M1 完成。无云/API 成本。
+
 **没有验证的部分，不能算通过：** 过期命令（`expiresAtMs` 超时）没有做真实的延迟触发测试，
 只是代码逻辑上有这个分支；MV3 service worker 真正 idle 30 秒后休眠再唤醒重连没有独立测试过
 （测试过的是桌面应用整进程重启后重连，机制上相关但不是同一件事）；SPA 内容变化重新上报没测；
-多窗口/多 profile 没测；Safari 完全没有开始，容器/签名/权限引导都是空白。当前 `pnpm check`、
-`pnpm test`（18 个测试，含协议、socket authority 与测试页 scope 用例）、`pnpm build:extension` 全部通过；
+多窗口/多 profile 没测；Safari 已有受限 fixture 的 UI、启用和真实消息证据，但尚无普通页面授权、
+重启/断连或 Electron 连通，不能据此宣称 Safari 已连接。当前 `pnpm check`、
+`pnpm test`（25 个测试，含协议、socket authority 与测试页 scope 用例）、`pnpm build:extension` 全部通过；
 working tree 未提交，等 Andrew 确认后再决定是否 commit。本次未产生 API/云成本。
 
 **Problem:** 助手自身不能成为新的干扰；开始任务和恢复工作应轻松。
@@ -367,6 +442,24 @@ stream/背压回归，`ditto` 直接解压同一压缩包只需 0.4 秒，排除
 后才导出/发送。开始实现前要决定本地存储/迁移、历史删除、时区周界、手动结束是否标为“完成”、
 模板格式、发送渠道及其授权/失败重试模型。它不能依赖浏览记录、模型或云账户，也不纳入 M2/M1
 完成条件。
+
+**2026-09-29 Andrew 的方向补充（仍是以后的事）：** FocusLit 最有价值的是功能，不是猫或桌宠：
+帮助专注，以及将来的总结和日报/周报/月报/年报。参考对象是 Forest 的"一眼看出自己专注了多久"，
+但不照搬它的 UI，要做出改进。报告范围从日/周扩展到月/年。
+
+**本地存储原则（在 M3/M4 开始写持久化之前定下来）：** 数据只存在本地，所以绝不能像微信那样涨到
+10 GB。从第一版持久化开始就分层保存，不要先全存、以后再迁移：
+
+| 层 | 内容 | 保留 | 量级 |
+| --- | --- | --- | --- |
+| 原始事件 | tab/URL 观测、干预事件 | 短期（如 ≤7 天，够生成日报即可），session 结束时先汇总 | 可能每天数万条，所以必须过期删除 |
+| Session 摘要 | 目标、开始/结束、实际 running 时长、打断次数、分心站点 top N、模板 | 永久（除非用户删除） | 约 200 B/条；每天 10 条，一年约 1 MB |
+| 报告 | 日/周/月/年统计 | **不单独存**，从 session 摘要实时计算 | 0 |
+| AI 文字总结 | 模型生成的报告正文 | 缓存；可删除或重新生成 | 每份几 KB |
+
+候选存储是单文件 SQLite，便于查询、备份和导出，最终在持久化切片里决策。需要验证的点：
+十年数据的体积上限估算（目标几十 MB 以内）；原始事件过期删除有测试；删除历史后报告同步更新；
+时区与周界规则。
 
 ## M3 — 可信的本地干预
 
@@ -470,6 +563,15 @@ stream/背压回归，`ditto` 直接解压同一压缩包只需 0.4 秒，排除
 - [ ] 中文/英文、两屏、音乐、两任务各完成 1h 和 3h 工作流测试。
 - [ ] 安装覆盖升级、数据备份/恢复、卸载 host 注册与清除数据验证。
 - [ ] 发布已知问题、隐私说明、支持矩阵、成本边界、恢复方案；首次发布由用户确认。
+- [ ] 项目 license 已由 Andrew 决定并加入仓库（见下方"License 待定"）。
+
+**License 待定（2026-09-29）：** 仓库已公开，但还没有 LICENSE 文件；默认是"保留所有权利"，
+他人可以看代码，但无权复用。最有价值的是功能与报告，所以 MIT/Apache-2.0 这类宽松协议等于允许
+别人直接做竞品。候选：继续不加 license；FSL-1.1（源码公开、禁止竞品、2 年后转 Apache/MIT，
+属于 source-available，不能称 open source）；AGPL-3.0（真开源，但挡不住开源克隆）。美术可以
+单独用一份资产 license。注意：AI 生成图片的版权保护可能较弱，品牌更依赖名字/商标。渲染层猫图
+已提交进 git，仓库公开后会随历史一起公开。在吸引外部贡献或首次公开发布之前必须做出决定；
+不是法律意见，商业化前需要专业确认。
 
 **Observability:** 本地诊断导出默认脱敏；无默认上传浏览历史/遥测；每个包有版本、SHA 和校验和。
 

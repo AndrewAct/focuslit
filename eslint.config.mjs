@@ -2,7 +2,16 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/.vite/**", "**/out/**", "**/dist/**", "**/coverage/**"] },
+  {
+    ignores: [
+      "**/.vite/**",
+      "**/out/**",
+      "**/dist/**",
+      "**/coverage/**",
+      // Xcode-generated files and the synced copy of native/macos/safari/extension.
+      "native/macos/safari/project/**",
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -22,6 +31,13 @@ export default tseslint.config(
         URL: "readonly",
         setTimeout: "readonly",
       },
+    },
+  },
+  {
+    // Safari extension background script: WebExtension globals, no bundler.
+    files: ["native/macos/safari/extension/**/*.js"],
+    languageOptions: {
+      globals: { browser: "readonly", crypto: "readonly", console: "readonly" },
     },
   },
 );

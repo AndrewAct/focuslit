@@ -5,9 +5,17 @@ import type {
   SessionCommand,
   SessionViewDto,
 } from "@focuslit/contracts";
+import {
+  advanceCompanionAction,
+  initialCompanionActionSchedule,
+  type CompanionActionSchedule,
+} from "@focuslit/core/companion-actions";
 import catCelebratingV1 from "./assets/cat/focuslit-cat-celebrating-v1.png";
+import catEarWiggleLeftV1 from "./assets/cat/focuslit-cat-ear-wiggle-v1.png";
+import catEarWiggleRightV1 from "./assets/cat/focuslit-cat-ear-wiggle-right-v1.png";
 import catGroomingV1 from "./assets/cat/focuslit-cat-grooming-v1.png";
 import catHappyV1 from "./assets/cat/focuslit-cat-happy-v1.png";
+import catYawningV1 from "./assets/cat/focuslit-cat-yawning-v1.png";
 
 type Locale = "zh" | "en";
 const locale = ref<Locale>("zh");
@@ -124,12 +132,24 @@ const copy = computed(() =>
 
 const expanded = ref(false);
 
-type CatPose = "happy" | "grooming" | "celebrating";
+type CatPose =
+  | "happy"
+  | "grooming"
+  | "yawning"
+  | "ear-wiggle-left"
+  | "ear-wiggle-right"
+  | "celebrating";
 const catPose = ref<CatPose>("happy");
 const catSrc = computed(() => {
   switch (catPose.value) {
     case "grooming":
       return catGroomingV1;
+    case "yawning":
+      return catYawningV1;
+    case "ear-wiggle-left":
+      return catEarWiggleLeftV1;
+    case "ear-wiggle-right":
+      return catEarWiggleRightV1;
     case "celebrating":
       return catCelebratingV1;
     default:
@@ -137,6 +157,8 @@ const catSrc = computed(() => {
   }
 });
 let poseTimer: ReturnType<typeof setTimeout> | undefined;
+
+let companionSchedule: CompanionActionSchedule | undefined;
 
 function showPose(pose: Exclude<CatPose, "happy">, durationMs: number): void {
   if (poseTimer) clearTimeout(poseTimer);
@@ -155,6 +177,28 @@ function triggerGrooming(): void {
 
 function triggerCelebration(): void {
   showPose("celebrating", 2_400);
+}
+
+function elapsedSessionMs(value: SessionViewDto): number {
+  return Math.max(0, value.durationMs - value.remainingMs);
+}
+
+function advanceCompanionCadence(value: SessionViewDto): void {
+  // The random action is for the resting desktop pet, not an interruption
+  // while the user is actively using the compact panel. A later collapse can
+  // emit at most one overdue action; advanceCompanionAction prevents a burst.
+  if (expanded.value || value.phase !== "running") return;
+  if (!companionSchedule) companionSchedule = initialCompanionActionSchedule();
+  const next = advanceCompanionAction(
+    companionSchedule,
+    value.phase,
+    elapsedSessionMs(value),
+    Math.random,
+  );
+  companionSchedule = next.schedule;
+  if (next.action && catPose.value === "happy") {
+    showPose(next.action, 900);
+  }
 }
 
 // Optional per PRODUCT_DESIGN.md: some people find a visible countdown
@@ -359,12 +403,33 @@ watch(
   () => session.value.phase,
   (phase, previousPhase) => {
     if (
+      phase === "running" &&
+      (previousPhase === "idle" || previousPhase === "ended")
+    ) {
+      // A pause/resume also increments session revision, but it is still one
+      // uninterrupted companionship cadence. Only a freshly started session
+      // gets a new ten-minute warm-up.
+      companionSchedule = initialCompanionActionSchedule();
+    }
+    if (
       phase === "ended" &&
       (previousPhase === "running" || previousPhase === "paused")
     ) {
       triggerCelebration();
     }
   },
+);
+
+watch(
+  () => [
+    session.value.revision,
+    session.value.phase,
+    session.value.durationMs,
+    session.value.remainingMs,
+    expanded.value,
+  ],
+  () => advanceCompanionCadence(session.value),
+  { immediate: true },
 );
 
 onMounted(async () => {

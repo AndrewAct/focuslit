@@ -134,6 +134,11 @@ input:focus-visible {
 .cat.pose-celebrating {
   animation: celebration-pose 480ms ease-out both;
 }
+.cat.pose-yawning,
+.cat.pose-ear-wiggle-left,
+.cat.pose-ear-wiggle-right {
+  animation: companion-action-pose 900ms ease-in-out both;
+}
 @keyframes grooming-pose {
   0% {
     opacity: 0.7;
@@ -156,6 +161,25 @@ input:focus-visible {
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+@keyframes companion-action-pose {
+  0% {
+    opacity: 0.72;
+    transform: scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat.pose-grooming,
+  .cat.pose-celebrating,
+  .cat.pose-yawning,
+  .cat.pose-ear-wiggle-left,
+  .cat.pose-ear-wiggle-right {
+    animation: none;
   }
 }
 .hint {
@@ -356,12 +380,5 @@ footer {
   }
   footer {
     border-color: #4c4540;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cat.pose-grooming,
-  .cat.pose-celebrating {
-    animation: none;
   }
 }

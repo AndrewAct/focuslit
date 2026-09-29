@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "FocusLit Safari Bridge (development)",
+  "version": "0.1.0",
+  "description": "M1 development bridge. After an explicit click, reports only the local FocusLit Safari fixture page to the containing app.",
+  "permissions": ["activeTab", "nativeMessaging"],
+  "action": {
+    "default_title": "Send FocusLit fixture message"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
