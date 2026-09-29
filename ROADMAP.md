@@ -21,7 +21,7 @@
 
 ## 2026-09-27 用户反馈：产品方向修正与交接重点
 
-当前 `FocusLit.app` **只能做 60 分钟本地计时**。浏览器扩展、Safari/Chrome 桥接、权限引导、页面分类和自动干预均不存在；“Browser monitoring is not connected” 是真实不可用状态。因此当前不能当作完整专注助手使用。M1 先证明真实连接，M3 才能交付按规则干预；不为演示伪造“已连接”。
+当时的 `FocusLit.app` 只能做 60 分钟本地计时；当天后续改动已支持 1 小时、3 小时和自定义 1–180 分钟。浏览器扩展、Safari/Chrome 桥接、权限引导、页面分类和自动干预仍不存在；“Browser monitoring is not connected” 是真实不可用状态。因此当前不能当作完整专注助手使用。M1 先证明真实连接，M3 才能交付按规则干预；不为演示伪造“已连接”。
 
 用户明确否定了当前的大面板、简笔 CSS 猫和常驻中英切换：它们只算 M0 工程占位，**不是产品设计验收**。后续默认体验是桌面上独立、可拖动、安静陪伴的猫咪，视觉存在感与用户提供的第二张桌宠参考截图接近；**单击猫咪才展开紧凑操作层**，可开始/查看任务、暂停/继续、休息、结束，收起后回到猫咪。不要把当前 420×560 面板换色后当成桌宠。菜单栏与设置仍提供等价操作，透明区域不能挡住其他应用或抢输入焦点。
 
@@ -71,7 +71,7 @@ Spotlight 对深埋在 `~/dev/focuslit/apps/desktop/out/...` 里的 `.app` 短�
 指过去的 symlink），今天先记录、不处理；真要解决需要打包后把 `.app` 真拷贝一份进
 `/Applications`（而不是 symlink），留给以后需要更方便启动方式时再做，或等 M5 走正式签名分发。
 
-下一步排定两个方向，具体切片见 `docs/NEXT_STEPS.md`：
+后续保留两个方向；当前开工优先级见下方，具体切片见 `docs/NEXT_STEPS.md`：
 
 1. **M1 真实浏览器监测**：按既有 M1 计划做 Safari/Chrome 真实桥接，产品才能从"仅计时"
    变成真正的专注助手。
@@ -81,6 +81,70 @@ Spotlight 对深埋在 `~/dev/focuslit/apps/desktop/out/...` 里的 `.app` 短�
    用户主动交互（点击/悬停）的短暂响应，事件驱动、有明确开始和结束，不是常驻循环动画。
    实现前需要先出角色母版的舔毛姿势/动作稿供 Andrew 审阅，遵循与陪伴表情稿相同的"先出
    对照图/短录屏再接入应用"流程，不要直接跳正式资产或动画代码。
+
+## 2026-09-27 代码复核后的优先级与开工入口
+
+Andrew 确认下面三项需要修，但**不列为 P1，也不阻断下次先推进 M1**。它们是已知体验/边界缺口，不代表本次桌宠核心交互验收失效：
+
+| 后续修整 | 归属与完成证据 |
+| --- | --- |
+| 折叠态透明矩形边角仍拦截底下应用点击 | M2 桌面礼仪；在真实桌面验证点击猫咪可展开、透明区域可点穿，且拖拽仍可用 |
+| 拖动后或外接屏断开时猫咪可能留在可见区域外 | M1 多屏窗口验证 / M2 位置恢复；验证不同缩放、拔屏、重启后可见且可操作 |
+| 自定义时长空值、越界值被静默改成 60 或夹到 1–180 | M2 计时表单修整；给出明确校验反馈并阻止无效提交，验证实际开始时长与界面一致 |
+
+**下次直接开始：M1 Chrome 最小真实连接切片。** 从 `apps/extension` 的 Chrome MV3 最小扩展和本机 native messaging 链路入手，在自建无害测试页读取活动 tab 的 URL/标题及导航身份，经版本化消息送到桌面主进程，显示真实的未安装/待授权/已连接/断连状态；先只读，不执行关闭。用真实 Chrome 验证授权、导航、worker 重启和断连，再做指定测试 tab 的关闭实验。Safari 容器与桥接仍是 M1 的独立必过门槛，不能用 Chrome 的结果代替。具体执行顺序见 `docs/NEXT_STEPS.md`。
+
+## 2026-09-28 本地进展：M1 Chrome 只读链路代码完成，待真机验收
+
+实现了上面这条切片的完整代码路径。**下面这段是当天早些时候（写代码后、上真实 Chrome 前）的状态**，只是工程 smoke；
+后续在真实 Chrome 的验证结果见下方 M1 段的「2026-09-28 本地进展」，以那段为准。
+
+- `packages/contracts/src/browser-bridge.ts`：新增版本化协议 schema（`hello`/`welcome`/
+  `versionRejected`/`tabObserved`），含 protocolVersion、connectionEpoch、messageId、
+  profile/browserInstance/window/tab/navigationSeq 页面身份；`browser-bridge.test.ts` 覆盖
+  合法握手、多余字段拒绝、未知消息类型拒绝。
+- `apps/desktop/src/bridge/server.ts`：Electron 主进程内的 Unix socket server（路径
+  `~/Library/Application Support/FocusLit/bridge.sock`，换行分隔 JSON，是桌面与 host 进程
+  之间自定的私有帧格式，不是 Chrome 那套 4 字节长度前缀 stdio 帧），做版本校验、握手后才接受
+  `tabObserved`、连接状态（pending/connected/disconnected）推导 + `not-installed`（按
+  Chrome NativeMessagingHosts 清单文件是否存在推断）。`main.ts` 新增
+  `app.setName("FocusLit")`——不加这行的话，打包后 app 的 userData 目录名取决于被打进
+  asar 的 package.json，实测packaged 版本确实落到了 `~/Library/Application Support/@focuslit/desktop`
+  而不是 `FocusLit`，会让 host 脚本写死的 socket 路径直接失配；这个坑是这次本地验证时
+  真实碰到并修的，不是纸面假设。
+- `apps/desktop` 渲染层：footer 从写死的"浏览器监测尚未连接"改成真实 `bridge:getStatus`
+  / `bridge:changed` IPC 驱动，Chrome 显示 not-installed/pending/connected/disconnected
+  四态文案，Safari 单独显示"桥接尚未实现"（不复用同一套状态机，因为这四态目前只对 Chrome
+  是诚实的——Safari 完全没有实现，不是"未安装"那种可安装状态）。
+- `apps/extension`：Chrome MV3 扩展源码（`manifest.json` 用固定生成的 key 使解包加载的
+  extension id 稳定在 `fcfekebhkfdaifnkckadnhndhplfcfnm`，不随目录路径变化，方便 native
+  host 清单提前写死 allowed_origins）；`src/background.ts` 只在活动 tab URL 命中
+  `/focuslit-test-page/` 时才会上报（代码层面强制只读测试页，不依赖"Andrew 手动只开测试页"
+  这种约定），用 `chrome.storage.local`存 profileId、`chrome.storage.session` 存
+  browserInstanceId（前者跨浏览器重启持久、后者只跨 service worker 睡眠/唤醒持久、浏览器
+  真正退出后清空，用来区分"同一 profile"和"同一次浏览器启动"这两个不同身份）；`vite build`
+  产出 `dist/background.js` + `dist/manifest.json`，已跑通（117.67 kB，主要是打包进去的
+  zod，用于和 `packages/contracts` 共享同一份协议 schema）。
+- `native/macos/chrome-host/host.mjs`：Chrome 原生消息 host，故意不接工作区依赖、零第三方
+  包——Chrome 直接按绝对路径起这个进程，不经过 pnpm/vite，所以放弃了在这里复用 zod
+  校验，只做基本结构检查；真正的信任边界校验在桌面端（收到的都当不可信输入，交给
+  `bridge/server.ts` 的 zod schema 判定）。`install.mjs` 生成该 host 的 native messaging
+  清单并写入 Chrome 的 `NativeMessagingHosts` 目录、`chmod +x` host 脚本；用假 `HOME`
+  跑过一次验证路径拼接正确，**没有对 Andrew 真实的 Chrome profile 执行过**，需要他自己跑
+  `node native/macos/chrome-host/install.mjs`。
+- 本地验证到什么程度：起了一次 `pnpm dev`，确认 `bridge.sock` 真的创建在预期路径；写了
+  一个裸 socket 探针脚本模拟 host 端行为（发送错误 protocolVersion→收到 `versionRejected`；
+  正确握手→收到 `welcome`；未握手直接发 `tabObserved`→被丢弃不回应），三种行为都符合设计。
+  这只验证了桌面端 socket 协议本身，**没有验证 Chrome 扩展、native host 进程、真实
+  `chrome.runtime.connectNative` 链路、worker 唤醒/重连、也没有肉眼看过桌宠 footer
+  实际切换文案**——这些必须由 Andrew 在真实 Chrome 里做，见 `docs/NEXT_STEPS.md` 的
+  验收步骤。`pnpm check`、`pnpm test`（当时 9 个测试，新增 3 个 protocol schema 测试；最新为 18 个）、
+  `pnpm build:extension` 全部通过。
+- 已知缺口：桌面只跟踪一个活动 Chrome runtime；新 host 连接会主动替换旧 socket，避免旧连接
+  的迟到事件污染状态，但尚没有多 profile/多实例的并行状态模型；navigationSeq 是扩展本地计数器，不是
+  `chrome.webNavigation` 的真实 navigation id；tab/window id 复用问题仍未处理（沿用
+  ARCHITECTURE.md 里原有的已知限制）；host 与桌面之间断线重连有 2 秒退避，未做上限/退避
+  曲线的真实压测；Safari 完全未动工。
 
 ## M0 — 工程基础
 
@@ -131,7 +195,8 @@ Node 24.21.0 下 `pnpm package:mac` 生成未签名 arm64 `FocusLit.app`，本�
 
 **Problem:** 用户依赖两个浏览器；开发态可读 URL 不代表打包后可用，更不代表能安全关 tab。
 
-**Current behavior:** 未实现。仅有官方 API 能力依据，尚无本产品实测。
+**Current behavior:** Chrome 只读连接 + 指定测试 tab 关闭实验已在真实 Chrome 验证通过（见下方
+2026-09-28 本地进展）；Safari 完全未实现。距离两浏览器都满足本阶段退出门槛还很远。
 
 **Architecture:** 共享 TS 扩展逻辑 + 分平台 manifest；Chrome native messaging host；Safari
 Xcode 容器/原生扩展 + 桌面桥接；实际进程拓扑在本阶段决策记录中锁定。
@@ -166,11 +231,52 @@ Safari 不能直接复用 Chrome native messaging host。验证容器打包、�
 **Observability:** 脱敏的连接/权限/事件丢失状态、协议版本、命令 ACK/拒绝原因。
 
 **Known gaps:** 浏览器 API 缺少原子“比较页面版本再关闭”的能力时，仍有微小竞态；必须明确
-可接受范围和更保守的阻断选择，不能声称绝对零误关。
+可接受范围和更保守的阻断选择，不能声称绝对零误关。Chrome host 与桌面间的 Unix socket 当前
+只依赖同一 macOS 用户目录权限和协议 schema，尚没有每次安装的配对/认证 secret；因此它只适合
+受限的 M1 开发测试页实验，绝不能成为可对真实 tab 行使权限的最终本地信任边界。
 
 **Interview challenge questions:** 同一个 tab ID 为什么不够？两个浏览器都显示 active tab 时哪个在前台？
 
-## M2 — 一只愿意留在桌面上的猫
+**2026-09-28 本地进展（未完成里程碑，Chrome 半支才刚开始）：** 在 Andrew 的真实 Chrome 上完整
+跑通了只读连接 + 指定测试 tab 关闭实验，过程中定位并修复了两个只有真实环境才会暴露的 bug，
+记录下来因为都是有价值的调试证据，不是纸面设计就能预见的：
+
+1. **打包/开发态 userData 目录不一致。** Electron 默认按 package.json 的 `name` 字段
+   （`@focuslit/desktop`）而不是产品名 `FocusLit` 生成 `userData` 目录；实测已打包的旧版
+   `.app` 确实落在 `~/Library/Application Support/@focuslit/desktop`，会让 native host
+   写死的 socket 路径直接失配。修复：`main.ts` 顶部显式 `app.setName("FocusLit")`。
+2. **Chrome 原生消息 host 因 PATH 解析失败静默退出。** `host.mjs` 用
+   `#!/usr/bin/env node`；从终端手动跑没问题（shell PATH 含 Homebrew），但 Chrome 从
+   Dock/Spotlight 启动时用 macOS 极简默认 PATH（不含 `/opt/homebrew/bin`），`env` 找不到
+   `node`，进程在任何代码执行前就退出，Chrome 侧只报 `Native host has exited.`、没有其他
+   线索。定位靠对比"终端直接跑 host.mjs 正常"和"Chrome 拉起后立刻退出"这两个现象的差异。
+   修复：`install.mjs` 改为在安装时用 `process.execPath` 生成一个写死 node 绝对路径的
+   `run-host.sh` wrapper，native messaging 清单的 `path` 指向 wrapper 而不是 `host.mjs`
+   本身，绕开子进程 PATH 解析。
+3. **真实竞态：握手消息可能在到桌面的 socket 连接建立前就到达并被吞掉。** `host.mjs` 里
+   `connectSocket()` 是异步的；Chrome 通过 stdin 送来的 `hello` 有时会在这个连接完成前
+   到达，原实现里 `if (!socket) return;` 直接丢弃，握手就永久丢失，行为上表现为"偶尔连接
+   成功、重启后又连不上"——正是本地复现到的现象，不是猜测的边界情况。修复：加一个有上限
+   （50 条）的 `pendingOutbound` 队列，连接建立后统一 flush，不再吞消息。
+
+在此基础上验证通过：解包扩展加载（固定 id `fcfekebhkfdaifnkckadnhndhplfcfnm`，manifest 里
+`key` 字段生成）、`node native/macos/chrome-host/install.mjs` 注册 host 清单、真实
+hello/welcome 握手、footer 从 not-installed → pending → connected 的真实状态切换（`docs/NEXT_STEPS.md`
+有完整操作步骤）。指定测试 tab 关闭实验（`packages/contracts` 新增 `closeTab`/`closeTabOutcome`
+协议，扩展端在执行前重新读取 `chrome.tabs.get` 的实时状态，不信任命令自带的身份声明）三条
+安全属性都在真实 Chrome 里验证通过：
+
+- 正常关闭：点击后测试页 tab 真的被 `chrome.tabs.remove` 关闭。
+- 重复命令：tab 已不存在时再次点击返回 `tabNotFound`，没有误关别的 tab。
+- 换页保护：把测试页 tab 导航到 google.com 后点击关闭，返回 `navigationMismatch`，
+  Google 页面原样保留，没有被误关。
+
+**没有验证的部分，不能算通过：** 过期命令（`expiresAtMs` 超时）没有做真实的延迟触发测试，
+只是代码逻辑上有这个分支；MV3 service worker 真正 idle 30 秒后休眠再唤醒重连没有独立测试过
+（测试过的是桌面应用整进程重启后重连，机制上相关但不是同一件事）；SPA 内容变化重新上报没测；
+多窗口/多 profile 没测；Safari 完全没有开始，容器/签名/权限引导都是空白。当前 `pnpm check`、
+`pnpm test`（18 个测试，含协议、socket authority 与测试页 scope 用例）、`pnpm build:extension` 全部通过；
+working tree 未提交，等 Andrew 确认后再决定是否 commit。本次未产生 API/云成本。
 
 **Problem:** 助手自身不能成为新的干扰；开始任务和恢复工作应轻松。
 
@@ -179,6 +285,15 @@ approved 的布偶猫静态图（陪伴/愉悦一态），可拖动，单击展�
 1h/3h/自定义时长、暂停/继续/结束、浏览器状态），再单击收起；收起态下若时段进行中，猫咪
 下方可选悬浮显示倒计时（默认开，可在展开面板里关闭，偏好存 `localStorage`）。首次语言选择、
 模板、背景音乐、菜单栏尚未实现；语言 toggle 仍常驻在展开面板顶部，不是首启一次性选择。
+
+**2026-09-28 本地实现（待 Andrew 视觉/实机验收）：** 已以获批准的 happy 猫为 identity anchor
+新增两张透明动作稿：`focuslit-cat-grooming-v1.png`（抬爪舔毛）和
+`focuslit-cat-celebrating-v1.png`（小幅击掌）。渲染层只会在用户把指针移到猫咪上或点击展开/收起
+时短暂显示舔毛，结束一段 running/paused session 时显示庆祝；默认始终回到静止 happy 姿态，
+绝不循环动画。结束面板还会显示该时段实际累计的 running 时间（暂停不计入），但尚不持久化到
+历史。两张新资产和其接入仍属本地未提交材料，不能在没有 Andrew 128 px 实机审阅前声称已获美术
+验收或加入发布资产。资产来源：2026-09-28 以 `focuslit-cat-happy-v1.png` 为输入锚点、通过
+Codex 内置 ImageGen 生成；没有混入第三方角色或素材。
 
 **Architecture:** UI 消费 session/companion 状态；`main.ts` 用一个 `BrowserWindow`
 （`transparent/frame:false/alwaysOnTop/skipTaskbar/hasShadow:false`）承载三种窗口尺寸
@@ -215,8 +330,8 @@ approved 的布偶猫静态图（陪伴/愉悦一态），可拖动，单击展�
 **Observability:** 本地汇总时段、提示次数和用户反馈；时长不标为科学测得的”有效专注时间”。
 
 **Known gaps:** 不做网页相关性自动关闭；此阶段完成代表 companion 可用，不代表 blocker 完成。
-只有一种表情（陪伴/愉悦），六态目标中的不确定/提醒/倒计时/休息/完成五态尚未出稿，也没有
-点击/悬停触发的动作动画（如舔毛，见上方第三轮反馈）。透明窗口的点击/拖拽命中区域是整个
+除陪伴外，新做的完成/舔毛动作稿均待 128 px 视觉和实机交互验收；六态目标中的不确定/提醒/
+倒计时/休息仍未出稿。透明窗口的点击/拖拽命中区域是整个
 矩形（148×148 折叠态 / 320×460 展开态），不是猫咪像素级轮廓，收起态下矩形边角的透明区域
 理论上仍会挡住底下应用的点击，未做多屏/Spaces/全屏拖拽实测。没有菜单栏等价操作、没有模板/
 背景音乐/休息提醒。首次启动语言选择仍未实现。打包出的 `.app` 放在 `~/dev` 深处，Spotlight
@@ -243,6 +358,15 @@ stream/背压回归，`ditto` 直接解压同一压缩包只需 0.4 秒，排除
 **Interview challenge questions:** 如何证明 UI 没有抢焦点？猫咪的表情如何反映同一个业务状态？
 为什么 `-webkit-app-region: drag` 不能同时满足拖拽和点击展开？手动实现怎么正确区分二者，
 不靠视口坐标（会被窗口跟随光标移动这件事本身骗过）？
+
+### 后续想法：本地专注回顾与日报/周报（未排入当前里程碑）
+
+用户可以在每段结束时看到目标和实际累计 running 时间；将来可选择一个模板或自定义字段，把
+多段记录汇总为日报/周报。设计边界是：先本地保存最小必要的 session 摘要（目标、实际时长、
+开始/结束时间和用户选择的模板），默认不上传、不自动发送；只有用户明确选择发送目的地和时机
+后才导出/发送。开始实现前要决定本地存储/迁移、历史删除、时区周界、手动结束是否标为“完成”、
+模板格式、发送渠道及其授权/失败重试模型。它不能依赖浏览记录、模型或云账户，也不纳入 M2/M1
+完成条件。
 
 ## M3 — 可信的本地干预
 

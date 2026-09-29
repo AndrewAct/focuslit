@@ -4,6 +4,14 @@ import { performance } from "node:perf_hooks";
 import { app, BrowserWindow, ipcMain, powerMonitor, screen } from "electron";
 import { sessionCommandSchema } from "@focuslit/contracts";
 import { initialSession, sessionView, transition } from "@focuslit/core";
+import { BridgeServer } from "./bridge/server";
+
+// Forces app.getPath("userData") to "~/Library/Application Support/FocusLit"
+// in both `pnpm dev` and a packaged build — Electron would otherwise derive
+// the name from whichever package.json ends up bundled, which varies with
+// packaging and would silently break the Chrome native-messaging host's
+// hardcoded socket path (native/macos/chrome-host/host.mjs) if it drifted.
+app.setName("FocusLit");
 
 type WindowMode = "collapsed" | "collapsed-timer" | "expanded";
 const WINDOW_SIZES: Record<WindowMode, { width: number; height: number }> = {
@@ -15,13 +23,39 @@ const EDGE_MARGIN = 24;
 
 let mainWindow: BrowserWindow | null = null;
 let state = initialSession;
+const bridgeServer = new BridgeServer(app.getPath("userData"), () =>
+  publishBridgeStatus(),
+);
 
 function currentView() {
   return sessionView(state, performance.now());
 }
 
+// A BrowserWindow can outlive the renderer frame briefly (notably while Vite
+// reloads it or the app is quitting). Do not let timer/bridge notifications
+// send into that disposed frame; there is no state to recover because the
+// renderer requests a fresh snapshot when its next frame mounts.
+function sendToRenderer(channel: string, payload: unknown): void {
+  const window = mainWindow;
+  if (!window || window.isDestroyed()) return;
+
+  const contents = window.webContents;
+  if (contents.isDestroyed() || contents.mainFrame.isDestroyed()) return;
+
+  try {
+    contents.send(channel, payload);
+  } catch {
+    // Frame teardown can race the checks above. A later renderer gets its
+    // authoritative snapshot through the corresponding IPC getter.
+  }
+}
+
 function publish() {
-  mainWindow?.webContents.send("session:changed", currentView());
+  sendToRenderer("session:changed", currentView());
+}
+
+function publishBridgeStatus() {
+  sendToRenderer("bridge:changed", bridgeServer.getStatus());
 }
 
 function authorized(
@@ -110,6 +144,14 @@ app.whenReady().then(() => {
     if (!authorized(event)) throw new Error("Unauthorized IPC sender");
     return currentView();
   });
+  ipcMain.handle("bridge:getStatus", (event) => {
+    if (!authorized(event)) throw new Error("Unauthorized IPC sender");
+    return bridgeServer.getStatus();
+  });
+  ipcMain.handle("bridge:closeTestTab", (event) => {
+    if (!authorized(event)) throw new Error("Unauthorized IPC sender");
+    return bridgeServer.requestCloseTestTab();
+  });
   ipcMain.handle("window:setMode", (event, raw: unknown) => {
     if (!authorized(event)) throw new Error("Unauthorized IPC sender");
     if (raw !== "collapsed" && raw !== "collapsed-timer" && raw !== "expanded")
@@ -155,10 +197,13 @@ app.whenReady().then(() => {
     publish();
   }, 1000);
   createWindow();
+  bridgeServer.start();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+app.on("will-quit", () => bridgeServer.stop());
 
 function pauseForSystem() {
   state = transition(state, { type: "pause", atMs: performance.now() });

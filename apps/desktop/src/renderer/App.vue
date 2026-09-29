@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import type { SessionCommand, SessionViewDto } from "@focuslit/contracts";
+import type {
+  BridgeStatusView,
+  SessionCommand,
+  SessionViewDto,
+} from "@focuslit/contracts";
+import catCelebratingV1 from "./assets/cat/focuslit-cat-celebrating-v1.png";
+import catGroomingV1 from "./assets/cat/focuslit-cat-grooming-v1.png";
 import catHappyV1 from "./assets/cat/focuslit-cat-happy-v1.png";
 
 type Locale = "zh" | "en";
@@ -13,8 +19,22 @@ const session = ref<SessionViewDto>({
   remainingMs: 0,
   revision: 0,
 });
+const bridgeStatus = ref<BridgeStatusView>({
+  chrome: "not-installed",
+  safari: "not-installed",
+  lastObservedUrl: null,
+  lastObservedTitle: null,
+  lastObservedAtMs: null,
+  lastCloseResult: null,
+});
 const error = ref("");
+// Feedback for a closeTestTab() call that never reaches the extension at
+// all (not connected / nothing observed yet) — distinct from
+// bridgeStatus.lastCloseResult, which only exists once the extension has
+// actually evaluated and replied to a command.
+const closeRequestError = ref<string | null>(null);
 let unsubscribe: (() => void) | undefined;
+let unsubscribeBridge: (() => void) | undefined;
 
 const copy = computed(() =>
   locale.value === "zh"
@@ -36,7 +56,22 @@ const copy = computed(() =>
         running: "正在陪你完成",
         paused: "已暂停",
         ended: "这一段结束了",
-        browser: "浏览器监测尚未连接",
+        focusedFor: "已专注",
+        browserChromeNotInstalled: "Chrome：扩展未安装",
+        browserChromePending: "Chrome：已安装，等待连接",
+        browserChromeConnected: "Chrome：已连接（仅测试页，只读）",
+        browserChromeDisconnected: "Chrome：连接已断开",
+        browserSafari: "Safari：桥接尚未实现",
+        closeExperimentButton: "[M1 实验] 关闭测试页",
+        closeResultClosed: "已关闭",
+        closeResultTabNotFound: "未找到该 tab（可能已关闭）",
+        closeResultNavigationMismatch: "页面已变化，拒绝关闭",
+        closeResultExpired: "命令已过期",
+        closeResultConnectionMismatch: "连接已变化，拒绝执行",
+        closeResultRejected: "被拒绝",
+        closeRequestNotConnected: "未连接，无法发送",
+        closeRequestNoObservedPage: "还没有观测到测试页",
+        closeRequestPending: "关闭请求仍在等待结果",
         catAlt: "FocusLit 猫咪，愉悦表情",
         prototype: "更多表情与互动开发中",
         failure: "操作未完成，请重试。",
@@ -62,7 +97,22 @@ const copy = computed(() =>
         running: "Working alongside you",
         paused: "Paused",
         ended: "Session ended",
-        browser: "Browser monitoring is not connected",
+        focusedFor: "Focused",
+        browserChromeNotInstalled: "Chrome: extension not installed",
+        browserChromePending: "Chrome: installed, waiting to connect",
+        browserChromeConnected: "Chrome: connected (test page only, read-only)",
+        browserChromeDisconnected: "Chrome: connection lost",
+        browserSafari: "Safari: bridge not built yet",
+        closeExperimentButton: "[M1 experiment] Close test page",
+        closeResultClosed: "Closed",
+        closeResultTabNotFound: "Tab not found (may already be closed)",
+        closeResultNavigationMismatch: "Page changed, refused to close",
+        closeResultExpired: "Command expired",
+        closeResultConnectionMismatch: "Connection changed, refused",
+        closeResultRejected: "Rejected",
+        closeRequestNotConnected: "Not connected, couldn't send",
+        closeRequestNoObservedPage: "No observed test page yet",
+        closeRequestPending: "Close request is still awaiting a result",
         catAlt: "FocusLit cat, content expression",
         prototype: "More expressions and interactions coming soon",
         failure: "That action did not finish. Please try again.",
@@ -73,6 +123,39 @@ const copy = computed(() =>
 );
 
 const expanded = ref(false);
+
+type CatPose = "happy" | "grooming" | "celebrating";
+const catPose = ref<CatPose>("happy");
+const catSrc = computed(() => {
+  switch (catPose.value) {
+    case "grooming":
+      return catGroomingV1;
+    case "celebrating":
+      return catCelebratingV1;
+    default:
+      return catHappyV1;
+  }
+});
+let poseTimer: ReturnType<typeof setTimeout> | undefined;
+
+function showPose(pose: Exclude<CatPose, "happy">, durationMs: number): void {
+  if (poseTimer) clearTimeout(poseTimer);
+  catPose.value = pose;
+  poseTimer = setTimeout(() => {
+    catPose.value = "happy";
+    poseTimer = undefined;
+  }, durationMs);
+}
+
+// The pet stays still by default. A one-shot grooming pose acknowledges an
+// intentional interaction, and is never started from a timer or a loop.
+function triggerGrooming(): void {
+  if (catPose.value !== "celebrating") showPose("grooming", 900);
+}
+
+function triggerCelebration(): void {
+  showPose("celebrating", 2_400);
+}
 
 // Optional per PRODUCT_DESIGN.md: some people find a visible countdown
 // distracting, so this stays off-window state (localStorage) rather than a
@@ -110,6 +193,7 @@ watch(windowMode, (mode) => void window.focuslit.setWindowMode(mode), {
 });
 
 function toggleExpanded() {
+  triggerGrooming();
   expanded.value = !expanded.value;
 }
 
@@ -163,10 +247,73 @@ function onCatPointerCancel(event: PointerEvent) {
 }
 
 const status = computed(() => copy.value[session.value.phase]);
+const browserChromeStatus = computed(() => {
+  switch (bridgeStatus.value.chrome) {
+    case "connected":
+      return copy.value.browserChromeConnected;
+    case "pending":
+      return copy.value.browserChromePending;
+    case "disconnected":
+      return copy.value.browserChromeDisconnected;
+    default:
+      return copy.value.browserChromeNotInstalled;
+  }
+});
 const remaining = computed(() => {
   const totalSeconds = Math.ceil(session.value.remainingMs / 1000);
   return `${String(Math.floor(totalSeconds / 60)).padStart(2, "0")}:${String(totalSeconds % 60).padStart(2, "0")}`;
 });
+const focusedDuration = computed(() => {
+  const totalSeconds = Math.floor(
+    Math.max(0, session.value.durationMs - session.value.remainingMs) / 1000,
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (locale.value === "zh") {
+    if (hours > 0) return `${hours} 小时 ${minutes} 分钟`;
+    return minutes > 0 ? `${minutes} 分钟` : `${totalSeconds} 秒`;
+  }
+  return hours > 0
+    ? `${hours}h ${minutes}m`
+    : minutes > 0
+      ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+      : `${totalSeconds} ${totalSeconds === 1 ? "second" : "seconds"}`;
+});
+
+const closeResultText = computed(() => {
+  if (closeRequestError.value === "not-connected")
+    return copy.value.closeRequestNotConnected;
+  if (closeRequestError.value === "no-observed-page")
+    return copy.value.closeRequestNoObservedPage;
+  if (closeRequestError.value === "close-request-pending")
+    return copy.value.closeRequestPending;
+  switch (bridgeStatus.value.lastCloseResult) {
+    case "closed":
+      return copy.value.closeResultClosed;
+    case "tabNotFound":
+      return copy.value.closeResultTabNotFound;
+    case "navigationMismatch":
+      return copy.value.closeResultNavigationMismatch;
+    case "expired":
+      return copy.value.closeResultExpired;
+    case "connectionMismatch":
+      return copy.value.closeResultConnectionMismatch;
+    case "rejected":
+      return copy.value.closeResultRejected;
+    default:
+      return null;
+  }
+});
+
+async function closeTestTab() {
+  closeRequestError.value = null;
+  try {
+    const result = await window.focuslit.closeTestTab();
+    if (!result.ok) closeRequestError.value = result.reason;
+  } catch {
+    closeRequestError.value = "not-connected";
+  }
+}
 
 type DurationPreset = 60 | 180 | "custom";
 const durationPreset = ref<DurationPreset>(60);
@@ -208,17 +355,42 @@ function start() {
     });
 }
 
+watch(
+  () => session.value.phase,
+  (phase, previousPhase) => {
+    if (
+      phase === "ended" &&
+      (previousPhase === "running" || previousPhase === "paused")
+    ) {
+      triggerCelebration();
+    }
+  },
+);
+
 onMounted(async () => {
   unsubscribe = window.focuslit.onSessionChanged(
     (value) => (session.value = value),
+  );
+  unsubscribeBridge = window.focuslit.onBridgeChanged(
+    (value) => (bridgeStatus.value = value),
   );
   try {
     session.value = await window.focuslit.getSession();
   } catch {
     error.value = copy.value.failure;
   }
+  try {
+    bridgeStatus.value = await window.focuslit.getBridgeStatus();
+  } catch {
+    // Bridge status is best-effort display only; leave the default
+    // "not-installed" view rather than surfacing a session-level error.
+  }
 });
-onUnmounted(() => unsubscribe?.());
+onUnmounted(() => {
+  unsubscribe?.();
+  unsubscribeBridge?.();
+  if (poseTimer) clearTimeout(poseTimer);
+});
 </script>
 
 <template>
@@ -254,6 +426,7 @@ onUnmounted(() => unsubscribe?.());
         tabindex="0"
         :aria-label="expanded ? copy.collapseCat : copy.expandCat"
         @pointerdown="onCatPointerDown"
+        @pointerenter="triggerGrooming"
         @pointermove="onCatPointerMove"
         @pointerup="onCatPointerUp"
         @pointercancel="onCatPointerCancel"
@@ -262,8 +435,8 @@ onUnmounted(() => unsubscribe?.());
       >
         <img
           class="cat"
-          :class="{ small: expanded }"
-          :src="catHappyV1"
+          :class="[`pose-${catPose}`, { small: expanded }]"
+          :src="catSrc"
           :alt="copy.catAlt"
         />
         <p v-if="collapsedTimerVisible" class="floating-timer">
@@ -276,7 +449,9 @@ onUnmounted(() => unsubscribe?.());
         <p class="eyebrow">{{ status }}</p>
         <h1>
           {{
-            session.phase === "running" || session.phase === "paused"
+            session.phase === "running" ||
+            session.phase === "paused" ||
+            session.phase === "ended"
               ? session.goal
               : copy.companion
           }}
@@ -286,6 +461,9 @@ onUnmounted(() => unsubscribe?.());
           class="timer"
         >
           {{ remaining }}
+        </p>
+        <p v-else-if="session.phase === 'ended'" class="completion-summary">
+          {{ copy.focusedFor }} {{ focusedDuration }}
         </p>
 
         <form
@@ -378,7 +556,27 @@ onUnmounted(() => unsubscribe?.());
       </section>
 
       <footer v-if="expanded">
-        <span class="status-dot"></span>{{ copy.browser }}
+        <p class="status-line">
+          <span
+            class="status-dot"
+            :class="{ connected: bridgeStatus.chrome === 'connected' }"
+          ></span
+          >{{ browserChromeStatus }}
+        </p>
+        <p class="status-line">
+          <span class="status-dot"></span>{{ copy.browserSafari }}
+        </p>
+        <div
+          v-if="bridgeStatus.chrome === 'connected'"
+          class="close-experiment"
+        >
+          <button type="button" class="secondary" @click="closeTestTab">
+            {{ copy.closeExperimentButton }}
+          </button>
+          <p v-if="closeResultText" class="close-result">
+            {{ closeResultText }}
+          </p>
+        </div>
       </footer>
     </div>
   </main>
