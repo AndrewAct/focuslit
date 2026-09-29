@@ -1,6 +1,6 @@
 # FocusLit roadmap
 
-更新：2026-09-27。**M0 本地实现进行中；M2 桌宠核心交互本地进行中；M0–M5 均未完成。** 当天首次桌面截图收到明确的产品体验否定反馈，随后同一天内实现并经 Andrew 实机验收了真实透明桌宠窗口；下述修正与进展是后续实现和验收依据。
+更新：2026-09-29。**M0 本地实现进行中；M1 平台验证本地进行中；M2 桌宠核心交互本地进行中；M0–M5 均未完成。** 当天首次桌面截图收到明确的产品体验否定反馈，随后同一天内实现并经 Andrew 实机验收了真实透明桌宠窗口；下述修正与进展是后续实现和验收依据。
 
 目标：用户说清当前任务后，一只安静的猫帮助识别并中止持续分心，同时保留资料检索、
 背景音乐和自主休息。第一版面向个人 macOS 使用，再达到可分发的私测质量。
@@ -10,7 +10,7 @@
 | 阶段 | 可见成果 | 退出门槛 | 状态 |
 | --- | --- | --- | --- |
 | M0 工程基础 | 可启动的安全桌面窗口，PR 自动检查 | 从干净 checkout 安装、测试、构建通过 | 本地进行中；CI 未运行 |
-| M1 平台验证 | Safari/Chrome 真实连接与状态引导；桌面猫咪跨屏窗口验证 | 实机桥接、权限/重启/断连、指定测试 tab 关闭证据，签名分发路径明确 | 未开始 |
+| M1 平台验证 | Safari/Chrome 真实连接与状态引导；桌面猫咪跨屏窗口验证 | 实机桥接、权限/重启/断连、指定测试 tab 关闭证据，签名分发路径明确 | 本地进行中：Chrome 实验已验证；Safari 的本地 fixture → native 容器已实机验证，尚未接入 Electron |
 | M2 陪伴体验 | 默认布偶猫气质桌宠、点击展开操作、首次语言选择、音乐与休息 | 经用户认可的猫咪造型；无 AI 也能完成舒服的完整时段 | 本地进行中：透明桌宠窗口/拖拽/点击展开/时长选择已验收；表情/模板/音乐/首启语言/菜单栏未完成 |
 | M3 确定性干预 | 规则提醒、倒计时、关闭与恢复链接 | 关键竞态、误关防护、重启恢复测试通过 | 未开始 |
 | M4 语义与预算 | OpenAI/Anthropic 可选接入，先观察再启用干预 | 固定评估集、实用成本账本、错误降级通过 | 未开始 |
@@ -81,6 +81,33 @@ Spotlight 对深埋在 `~/dev/focuslit/apps/desktop/out/...` 里的 `.app` 短�
    用户主动交互（点击/悬停）的短暂响应，事件驱动、有明确开始和结束，不是常驻循环动画。
    实现前需要先出角色母版的舔毛姿势/动作稿供 Andrew 审阅，遵循与陪伴表情稿相同的"先出
    对照图/短录屏再接入应用"流程，不要直接跳正式资产或动画代码。
+
+## 2026-09-28 本地进展：M2 长时段小动作已接入并完成新包
+
+Andrew 提出桌宠在较长的专注时段也应偶尔有一点生气；确认的规则是：**进行中的 session 满 10
+分钟后做一次短暂动作，之后每 5–10 分钟活动专注时间随机做一次**。这不是连续动画或 idle
+判定，也不会抢焦点。随机动作候选为已有的舔毛、哈欠与耳朵轻摆；只要选中耳朵，左右耳就按上次
+方向轮换，避免重复同侧而显得机械。面板展开时不播随机动作；暂停/睡眠不累计，恢复后不会补发
+遗漏的多次动作，渲染延迟最多只播一次后重新从当前活动时间安排下一次。
+
+**已批准的美术与来源：** Andrew 已在 128 px 看过并认可 `focuslit-cat-yawning-v1.png`、
+`focuslit-cat-ear-wiggle-v1.png`（左耳）和 `focuslit-cat-ear-wiggle-right-v1.png`（右耳）。它们
+用获批准的 `assets/focuslit-cat-happy-v1.png` 作 identity anchor、由 Codex 内置 ImageGen 生成，
+透明背景、无第三方角色/素材；根 `assets/` 保留审阅源稿，渲染层副本在
+`apps/desktop/src/renderer/assets/cat/`。这些资产和本次代码仍是本地未提交材料，若将来要追踪/
+公开，先按 AGENTS.md 决定资产许可与仓库范围。
+
+**实现和验证：** `packages/core/src/companion-actions.ts` 保持调度为可注入随机源的纯函数；
+`companion-actions.test.ts` 覆盖 10 分钟阈值、5–10 分钟上/下界、暂停不触发、渲染延迟不补发和
+耳朵方向轮换。`App.vue` 按 session 的活动累计时长消费结果并映射到静态动作图；`style.css` 只做
+一次性淡入/缩放，Reduced Motion 退回静态姿态。使用 Node 24.21.0 的 `pnpm test`（24 passed）和
+`pnpm check` 均通过；`pnpm package:mac` 成功生成新的 arm64 未签名
+`apps/desktop/out/FocusLit-darwin-arm64/FocusLit.app`，并核对其 `app.asar` 含三张新动作 PNG。
+无新增运行时网络、云服务或 API 成本；代价是三张静态透明 PNG 增加包体积，尚未测量最终包增量。
+
+**未完成边界：** 尚未在真实桌面连续运行超过 10 分钟以确认频率、打断感与点击/拖拽不受影响；
+也没有完成签名、公证或发布。动作功能不代表 M2 已完成，六态的其余表情、首启语言、菜单栏、
+音乐、休息与桌面礼仪验收仍按原退出门槛推进。
 
 ## 2026-09-27 代码复核后的优先级与开工入口
 
@@ -196,9 +223,9 @@ Node 24.21.0 下 `pnpm package:mac` 生成未签名 arm64 `FocusLit.app`，本�
 **Problem:** 用户依赖两个浏览器；开发态可读 URL 不代表打包后可用，更不代表能安全关 tab。
 
 **Current behavior:** Chrome 只读连接 + 指定测试 tab 关闭实验已在真实 Chrome 验证通过（见下方
-2026-09-28 本地进展）。Safari 已有 Apple Development 签名的 Xcode Debug 容器与只读测试页消息
-代码，但尚未完成容器 UI 人工验收、安装/启用、真实 Safari 消息或 Electron 连通；距离两浏览器都
-满足本阶段退出门槛还很远。
+2026-09-28 本地进展）。Safari 的 Apple Development 签名 Debug 容器已在实机启用；用户明确点击
+工具栏 action 后，限定本地 fixture 页成功完成 Safari extension → native handler 往返。它没有读取
+其他页面、没有关闭 tab、没有 Electron 连通或应用内连接状态，因此距离 M1 退出门槛仍很远。
 
 **Architecture:** 共享 TS 扩展逻辑 + 分平台 manifest；Chrome native messaging host；Safari
 Xcode 容器/原生扩展 + 桌面桥接；实际进程拓扑在本阶段决策记录中锁定。
@@ -305,12 +332,25 @@ Electron app 的组成部分，也没有被复制到 `/Applications`。Spotlight
 同意后，才可打开 Safari Extensions Settings 并启用扩展。之后才验证 fixture 消息，再另行设计
 container → Electron 的受认证 IPC；不能把临时 DerivedData app 当作已集成、可发布的桌宠 build。
 
+**Safari 2026-09-29 实机验证（未完成里程碑）：** 在 Safari Extensions Settings 中移除了旧的开发
+容器并启用了一个新签名 Debug 容器；旧 `.app` 仅移入废纸篓，仍可恢复。此前 `tabs` 权限会导致
+Safari 警告扩展可查看所有访问网站的历史；为避免这个过宽授权，开发 manifest 改为仅
+`activeTab` + `nativeMessaging`，没有 host permissions，也没有后台 tab 监听。扩展只在用户显式点击
+工具栏 action 时接收 Safari 交给它的当前 tab，并且只接受本地
+`file:///.../focuslit-safari-test-page/index.html` fixture。实机点击后 action 的仅悬停标题变为
+`Fixture message accepted`，证明 extension → native handler 的消息和回执真实往返；Safari 设置也
+显示为仅在使用扩展时读取当前标签页，而不是所有网站历史。临时 `OK`/`!` 角标被用户认为干扰，已在
+同日构建中移除并主动清空旧 badge，保留无常驻视觉装饰的悬停反馈。最终 Debug app 已重建并通过
+`codesign --verify --deep --strict`；`pnpm test`（25 项）、`pnpm check` 与 `git diff --check` 通过。
+该证据只覆盖受限 fixture 的 extension → container 消息，**不代表** Safari 对普通页面的监测、关闭
+tab、权限撤销/重启/断连恢复、Safari → Electron IPC、分发安装或 M1 完成。无云/API 成本。
+
 **没有验证的部分，不能算通过：** 过期命令（`expiresAtMs` 超时）没有做真实的延迟触发测试，
 只是代码逻辑上有这个分支；MV3 service worker 真正 idle 30 秒后休眠再唤醒重连没有独立测试过
 （测试过的是桌面应用整进程重启后重连，机制上相关但不是同一件事）；SPA 内容变化重新上报没测；
-多窗口/多 profile 没测；Safari 尚无 UI 人工验收、安装/启用、真实消息或权限引导证据，不能据
-容器/签名代码宣称已连通。当前 `pnpm check`、
-`pnpm test`（18 个测试，含协议、socket authority 与测试页 scope 用例）、`pnpm build:extension` 全部通过；
+多窗口/多 profile 没测；Safari 已有受限 fixture 的 UI、启用和真实消息证据，但尚无普通页面授权、
+重启/断连或 Electron 连通，不能据此宣称 Safari 已连接。当前 `pnpm check`、
+`pnpm test`（25 个测试，含协议、socket authority 与测试页 scope 用例）、`pnpm build:extension` 全部通过；
 working tree 未提交，等 Andrew 确认后再决定是否 commit。本次未产生 API/云成本。
 
 **Problem:** 助手自身不能成为新的干扰；开始任务和恢复工作应轻松。
