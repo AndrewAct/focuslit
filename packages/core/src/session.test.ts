@@ -40,16 +40,16 @@ describe("session", () => {
     expect(transition(ended, { type: "resume", atMs: 9_000 })).toBe(ended);
   });
 
-  it("rejects invalid starts and ignores clock rollback", () => {
-    expect(
-      transition(initialSession, {
-        type: "start",
-        id: "x",
-        goal: " ",
-        durationMs: 1,
-        atMs: 0,
-      }),
-    ).toBe(initialSession);
+  it("allows an unnamed session and ignores clock rollback", () => {
+    const unnamed = transition(initialSession, {
+      type: "start",
+      id: "x",
+      goal: " ",
+      durationMs: 1,
+      atMs: 0,
+    });
+    expect(unnamed.phase).toBe("running");
+    expect(unnamed.goal).toBe("");
     const started = transition(initialSession, {
       type: "start",
       id: "a",

@@ -47,15 +47,14 @@ let unsubscribeBridge: (() => void) | undefined;
 const copy = computed(() =>
   locale.value === "zh"
     ? {
-        companion: "和你一起，专注这一段。",
-        goal: "这一小时想做什么？",
+        companion: "和你一起，专心致志",
+        goal: "这段时间想做什么？（可选）",
         example: "例如：完成两道动态规划题",
         duration: "时长",
         duration1h: "1 小时",
         duration3h: "3 小时",
         durationCustom: "自定义",
         durationCustomLabel: "自定义时长（分钟）",
-        startPrefix: "开始",
         minutesUnit: "分钟",
         pause: "暂停",
         resume: "继续",
@@ -63,13 +62,14 @@ const copy = computed(() =>
         idle: "准备开始",
         running: "正在陪你完成",
         paused: "已暂停",
-        ended: "这一段结束了",
+        ended: "已完成",
+        unnamedSession: "专注时段",
         focusedFor: "已专注",
         browserChromeNotInstalled: "Chrome：扩展未安装",
         browserChromePending: "Chrome：已安装，等待连接",
         browserChromeConnected: "Chrome：已连接（仅测试页，只读）",
         browserChromeDisconnected: "Chrome：连接已断开",
-        browserSafari: "Safari：桥接尚未实现",
+        browserSafari: "Safari：尚未接入 FocusLit",
         closeExperimentButton: "[M1 实验] 关闭测试页",
         closeResultClosed: "已关闭",
         closeResultTabNotFound: "未找到该 tab（可能已关闭）",
@@ -88,15 +88,14 @@ const copy = computed(() =>
         showTimerToggle: "收起时在猫咪下方显示倒计时",
       }
     : {
-        companion: "Here with you for this session.",
-        goal: "What will you work on this hour?",
+        companion: "Here to help you stay focused.",
+        goal: "What would you like to focus on? (optional)",
         example: "For example: solve two dynamic programming problems",
         duration: "Duration",
         duration1h: "1 hour",
         duration3h: "3 hours",
         durationCustom: "Custom",
         durationCustomLabel: "Custom duration (minutes)",
-        startPrefix: "Start",
         minutesUnit: "minutes",
         pause: "Pause",
         resume: "Resume",
@@ -104,13 +103,14 @@ const copy = computed(() =>
         idle: "Ready to begin",
         running: "Working alongside you",
         paused: "Paused",
-        ended: "Session ended",
+        ended: "Session complete",
+        unnamedSession: "Focus session",
         focusedFor: "Focused",
         browserChromeNotInstalled: "Chrome: extension not installed",
         browserChromePending: "Chrome: installed, waiting to connect",
         browserChromeConnected: "Chrome: connected (test page only, read-only)",
         browserChromeDisconnected: "Chrome: connection lost",
-        browserSafari: "Safari: bridge not built yet",
+        browserSafari: "Safari: not connected to FocusLit yet",
         closeExperimentButton: "[M1 experiment] Close test page",
         closeResultClosed: "Closed",
         closeResultTabNotFound: "Tab not found (may already be closed)",
@@ -369,9 +369,10 @@ const durationMinutes = computed(() => {
   const rounded = Math.round(customMinutes.value);
   return Math.min(180, Math.max(1, Number.isFinite(rounded) ? rounded : 60));
 });
-const startLabel = computed(
-  () =>
-    `${copy.value.startPrefix} ${durationMinutes.value} ${copy.value.minutesUnit}`,
+const startLabel = computed(() =>
+  locale.value === "zh"
+    ? `开始专注 ${durationMinutes.value} ${copy.value.minutesUnit}`
+    : `Start ${durationMinutes.value}-minute session`,
 );
 
 function selectDurationPreset(preset: DurationPreset) {
@@ -391,13 +392,16 @@ async function send(command: SessionCommand) {
 }
 
 function start() {
-  if (goal.value.trim())
-    void send({
-      type: "start",
-      goal: goal.value,
-      durationMinutes: durationMinutes.value,
-    });
+  void send({
+    type: "start",
+    goal: goal.value,
+    durationMinutes: durationMinutes.value,
+  });
 }
+
+const sessionTitle = computed(
+  () => session.value.goal || copy.value.unnamedSession,
+);
 
 watch(
   () => session.value.phase,
@@ -517,7 +521,7 @@ onUnmounted(() => {
             session.phase === "running" ||
             session.phase === "paused" ||
             session.phase === "ended"
-              ? session.goal
+              ? sessionTitle
               : copy.companion
           }}
         </h1>
@@ -583,7 +587,7 @@ onUnmounted(() => {
             />
           </div>
 
-          <button class="primary" type="submit" :disabled="!goal.trim()">
+          <button class="primary" type="submit">
             {{ startLabel }}
           </button>
         </form>
