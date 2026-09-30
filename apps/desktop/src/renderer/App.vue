@@ -81,7 +81,6 @@ const copy = computed(() =>
         closeRequestNoObservedPage: "还没有观测到测试页",
         closeRequestPending: "关闭请求仍在等待结果",
         catAlt: "FocusLit 猫咪，愉悦表情",
-        prototype: "更多表情与互动开发中",
         failure: "操作未完成，请重试。",
         expandCat: "点击展开",
         collapseCat: "点击收起",
@@ -122,7 +121,6 @@ const copy = computed(() =>
         closeRequestNoObservedPage: "No observed test page yet",
         closeRequestPending: "Close request is still awaiting a result",
         catAlt: "FocusLit cat, content expression",
-        prototype: "More expressions and interactions coming soon",
         failure: "That action did not finish. Please try again.",
         expandCat: "Click to expand",
         collapseCat: "Click to collapse",
@@ -511,7 +509,6 @@ onUnmounted(() => {
         <p v-if="collapsedTimerVisible" class="floating-timer">
           {{ remaining }}
         </p>
-        <p v-else-if="!expanded" class="hint">{{ copy.prototype }}</p>
       </div>
 
       <section v-if="expanded" class="session" aria-live="polite">
