@@ -57,7 +57,6 @@ export function transition(
       if (state.phase === "running" || state.phase === "paused") return state;
       if (
         !event.id ||
-        !event.goal.trim() ||
         !Number.isFinite(event.durationMs) ||
         event.durationMs <= 0
       )

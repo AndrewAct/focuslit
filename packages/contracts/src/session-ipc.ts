@@ -3,7 +3,9 @@ import { z } from "zod";
 export const sessionCommandSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("start"),
-    goal: z.string().trim().min(1).max(240),
+    // A session can be useful even when the person does not want to name a
+    // task. `trim()` also ensures whitespace-only input is stored as empty.
+    goal: z.string().trim().max(240),
     durationMinutes: z.number().int().min(1).max(180),
   }),
   z.strictObject({ type: z.literal("pause") }),
