@@ -182,12 +182,6 @@ input:focus-visible {
     animation: none;
   }
 }
-.hint {
-  margin: 6px 0 0;
-  color: #68615b;
-  font-size: 11px;
-  pointer-events: none;
-}
 .floating-timer {
   margin: 4px 0 0;
   color: #292524;
@@ -349,7 +343,6 @@ footer {
     background: #62564d;
     color: #fff;
   }
-  .hint,
   .timer-toggle,
   .close-result,
   footer {
