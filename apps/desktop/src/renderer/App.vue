@@ -235,7 +235,9 @@ watch(windowMode, (mode) => void window.focuslit.setWindowMode(mode), {
 });
 
 function toggleExpanded() {
-  triggerGrooming();
+  // Opening or closing the controls is navigation, not petting. Grooming is
+  // reserved for the direct pointer interaction above, so a normal click does
+  // not replay the pose after it switches the UI.
   expanded.value = !expanded.value;
 }
 
