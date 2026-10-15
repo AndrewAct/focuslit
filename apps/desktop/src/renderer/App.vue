@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type {
   BridgeStatusView,
+  Locale,
   SessionCommand,
   SessionViewDto,
 } from "@focuslit/contracts";
@@ -17,8 +18,17 @@ import catGroomingV1 from "./assets/cat/focuslit-cat-grooming-v1.png";
 import catHappyV1 from "./assets/cat/focuslit-cat-happy-v1.png";
 import catYawningV1 from "./assets/cat/focuslit-cat-yawning-v1.png";
 
-type Locale = "zh" | "en";
-const locale = ref<Locale>("zh");
+// null until the person picks a language on first launch. The main process
+// owns the persisted choice; the renderer never guesses from the OS locale.
+const chosenLocale = ref<Locale | null>(null);
+const settingsLoaded = ref(false);
+const locale = computed<Locale>(() => chosenLocale.value ?? "zh");
+const needsLanguageChoice = computed(
+  () => settingsLoaded.value && chosenLocale.value === null,
+);
+const languageSaveFailed = ref(false);
+type PanelView = "session" | "settings";
+const panelView = ref<PanelView>("session");
 const goal = ref("");
 const session = ref<SessionViewDto>({
   phase: "idle",
@@ -85,6 +95,9 @@ const copy = computed(() =>
         expandCat: "点击展开",
         collapseCat: "点击收起",
         showTimerToggle: "收起时在猫咪下方显示倒计时",
+        settings: "设置",
+        back: "返回",
+        language: "语言",
       }
     : {
         companion: "Here to help you stay focused.",
@@ -125,6 +138,9 @@ const copy = computed(() =>
         expandCat: "Click to expand",
         collapseCat: "Click to collapse",
         showTimerToggle: "Show countdown under the cat when collapsed",
+        settings: "Settings",
+        back: "Back",
+        language: "Language",
       },
 );
 
@@ -224,7 +240,7 @@ const collapsedTimerVisible = computed(
     (session.value.phase === "running" || session.value.phase === "paused"),
 );
 const windowMode = computed(() =>
-  expanded.value
+  expanded.value || needsLanguageChoice.value
     ? "expanded"
     : collapsedTimerVisible.value
       ? "collapsed-timer"
@@ -238,8 +254,32 @@ function toggleExpanded() {
   // Opening or closing the controls is navigation, not petting. Grooming is
   // reserved for the direct pointer interaction above, so a normal click does
   // not replay the pose after it switches the UI.
+  // The first-run language card cannot be dismissed: every later screen
+  // depends on that choice.
+  if (needsLanguageChoice.value) return;
   expanded.value = !expanded.value;
+  if (!expanded.value) panelView.value = "session";
 }
+
+async function chooseLocale(next: Locale) {
+  languageSaveFailed.value = false;
+  try {
+    const saved = await window.focuslit.updateSettings({ locale: next });
+    chosenLocale.value = saved.locale;
+  } catch {
+    // The choice was not persisted; showing it anyway would silently revert
+    // on the next launch, so keep the previous language and say so.
+    languageSaveFailed.value = true;
+  }
+}
+
+watch(
+  locale,
+  (value) => {
+    document.documentElement.lang = value === "zh" ? "zh-CN" : "en";
+  },
+  { immediate: true },
+);
 
 // Dragging is done manually (moving the OS window via IPC on every pointer
 // move) instead of `-webkit-app-region: drag`: that native region reliably
@@ -437,6 +477,13 @@ watch(
 );
 
 onMounted(async () => {
+  try {
+    chosenLocale.value = (await window.focuslit.getSettings()).locale;
+  } catch {
+    // Unknown settings → ask, rather than assume a language.
+    chosenLocale.value = null;
+  }
+  settingsLoaded.value = true;
   unsubscribe = window.focuslit.onSessionChanged(
     (value) => (session.value = value),
   );
@@ -464,32 +511,74 @@ onUnmounted(() => {
 
 <template>
   <main class="stage">
-    <div class="surface" :class="{ card: expanded }">
-      <header v-if="expanded" class="topbar">
-        <span class="brand">FocusLit</span>
-        <div
-          class="language toggle-group"
-          role="group"
-          aria-label="Language / 语言"
-        >
+    <div class="surface" :class="{ card: expanded || needsLanguageChoice }">
+      <section
+        v-if="needsLanguageChoice"
+        class="first-run"
+        aria-labelledby="first-run-title"
+      >
+        <img class="cat small" :src="catHappyV1" alt="" />
+        <h1 id="first-run-title">
+          <span lang="zh-CN">选择语言</span>
+          <span lang="en">Choose your language</span>
+        </h1>
+        <div class="language-choices">
           <button
             type="button"
-            :aria-pressed="locale === 'zh'"
-            @click="locale = 'zh'"
+            class="primary"
+            lang="zh-CN"
+            @click="chooseLocale('zh')"
           >
             中文
           </button>
           <button
             type="button"
-            :aria-pressed="locale === 'en'"
-            @click="locale = 'en'"
+            class="primary"
+            lang="en"
+            @click="chooseLocale('en')"
           >
-            EN
+            English
           </button>
         </div>
+        <p class="first-run-note">
+          <span lang="zh-CN">之后可以在设置中更改</span>
+          <span lang="en">You can change this later in Settings</span>
+        </p>
+        <p v-if="languageSaveFailed" class="error" role="alert">
+          <span lang="zh-CN">保存失败，请重试。</span>
+          <span lang="en">Couldn't save. Please try again.</span>
+        </p>
+      </section>
+
+      <header v-if="expanded && !needsLanguageChoice" class="topbar">
+        <span class="brand">FocusLit</span>
+        <button
+          v-if="panelView === 'session'"
+          type="button"
+          class="icon-button"
+          :aria-label="copy.settings"
+          :title="copy.settings"
+          @click="panelView = 'settings'"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.5.5 0 0 0 13.9 2.4h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.58.24-1.12.55-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.67 8.88a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.61.22l2.39-.96c.5.39 1.04.7 1.62.94l.36 2.54c.04.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.58-.24 1.12-.55 1.62-.94l2.39.96c.22.09.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2Z"
+            />
+          </svg>
+        </button>
+        <button
+          v-else
+          type="button"
+          class="secondary back-button"
+          @click="panelView = 'session'"
+        >
+          {{ copy.back }}
+        </button>
       </header>
 
       <div
+        v-if="!needsLanguageChoice"
         class="cat-wrap"
         role="button"
         tabindex="0"
@@ -513,7 +602,50 @@ onUnmounted(() => {
         </p>
       </div>
 
-      <section v-if="expanded" class="session" aria-live="polite">
+      <section
+        v-if="expanded && !needsLanguageChoice && panelView === 'settings'"
+        class="settings"
+        aria-labelledby="settings-title"
+      >
+        <h1 id="settings-title">{{ copy.settings }}</h1>
+        <label id="language-label">{{ copy.language }}</label>
+        <div
+          class="language toggle-group"
+          role="group"
+          aria-labelledby="language-label"
+        >
+          <button
+            type="button"
+            lang="zh-CN"
+            :aria-pressed="chosenLocale === 'zh'"
+            @click="chooseLocale('zh')"
+          >
+            中文
+          </button>
+          <button
+            type="button"
+            lang="en"
+            :aria-pressed="chosenLocale === 'en'"
+            @click="chooseLocale('en')"
+          >
+            English
+          </button>
+        </div>
+        <p v-if="languageSaveFailed" class="error" role="alert">
+          {{ copy.failure }}
+        </p>
+
+        <label class="timer-toggle">
+          <input type="checkbox" v-model="showTimerWhenCollapsed" />
+          {{ copy.showTimerToggle }}
+        </label>
+      </section>
+
+      <section
+        v-if="expanded && !needsLanguageChoice && panelView === 'session'"
+        class="session"
+        aria-live="polite"
+      >
         <p class="eyebrow">{{ status }}</p>
         <h1>
           {{
@@ -616,14 +748,11 @@ onUnmounted(() => {
           </button>
         </div>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
-
-        <label class="timer-toggle">
-          <input type="checkbox" v-model="showTimerWhenCollapsed" />
-          {{ copy.showTimerToggle }}
-        </label>
       </section>
 
-      <footer v-if="expanded">
+      <footer
+        v-if="expanded && !needsLanguageChoice && panelView === 'session'"
+      >
         <p class="status-line">
           <span
             class="status-dot"

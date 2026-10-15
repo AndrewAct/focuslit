@@ -2,9 +2,13 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { app, BrowserWindow, ipcMain, powerMonitor, screen } from "electron";
-import { sessionCommandSchema } from "@focuslit/contracts";
+import {
+  sessionCommandSchema,
+  settingsUpdateSchema,
+} from "@focuslit/contracts";
 import { initialSession, sessionView, transition } from "@focuslit/core";
 import { BridgeServer } from "./bridge/server";
+import { SettingsStore } from "./settings/store";
 
 // Forces app.getPath("userData") to "~/Library/Application Support/FocusLit"
 // in both `pnpm dev` and a packaged build — Electron would otherwise derive
@@ -23,6 +27,7 @@ const EDGE_MARGIN = 24;
 
 let mainWindow: BrowserWindow | null = null;
 let state = initialSession;
+const settingsStore = new SettingsStore(app.getPath("userData"));
 const bridgeServer = new BridgeServer(app.getPath("userData"), () =>
   publishBridgeStatus(),
 );
@@ -140,6 +145,27 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const settingsOutcome = settingsStore.load();
+  if (settingsOutcome === "quarantined") {
+    console.warn(
+      "FocusLit: settings.json was unreadable; moved aside and asking for language again.",
+    );
+  } else if (
+    settingsOutcome === "unsupported-version" ||
+    settingsOutcome === "recovery-failed"
+  ) {
+    console.warn(
+      `FocusLit: settings unavailable (${settingsOutcome}); saves blocked to preserve the original file.`,
+    );
+  }
+  ipcMain.handle("settings:get", (event) => {
+    if (!authorized(event)) throw new Error("Unauthorized IPC sender");
+    return settingsStore.get();
+  });
+  ipcMain.handle("settings:update", async (event, raw: unknown) => {
+    if (!authorized(event)) throw new Error("Unauthorized IPC sender");
+    return settingsStore.update(settingsUpdateSchema.parse(raw));
+  });
   ipcMain.handle("session:get", (event) => {
     if (!authorized(event)) throw new Error("Unauthorized IPC sender");
     return currentView();

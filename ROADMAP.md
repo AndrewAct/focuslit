@@ -26,6 +26,8 @@ Andrew 明确指出：主操作层同时常驻中文/English toggle 已经是反
 中文或 English；选择持久化；后续 UI 只显示所选语言；主面板移除语言 toggle，语言变更仅在
 Settings 可达。验收包含首次启动、重启保留、设置内即时切换、中英文实际截图与打包 app 实机验证。
 这项实现尚未开始；2026-09-29 仅调整了中英文面板文案，并允许空目标启动本地时段。
+2026-10-12 本地进展：代码已实现、未提交——`SettingsStore` 在 userData 原子写 `settings.json`（temp+fsync+rename，串行写，损坏文件改名隔离后重新询问），首启双语选择卡不可关闭，主面板语言toggle 已移除，设置页含语言与收起倒计时开关；`pnpm check`、`pnpm test`（34 个）通过。**尚未实机验收**：首启、重启保留、设置内即时切换、中英截图、打包 app 均待 Andrew 验证。
+2026-10-13 review 与本地打包：基线 `1b6ba89` 的未提交改动；规范 review 发现并修复两项设置保护问题：未知版本文件保留原位并阻止写入，损坏文件隔离失败时阻止覆盖，补充保留原始字节与安全恢复回归测试。需求 review 无新增问题。Node 24.21.0 下 `pnpm check`、`pnpm test:coverage`（35 项）及 `git diff --check` 通过；覆盖率首次受沙箱 Unix socket 权限限制，授权后通过。`pnpm package:mac` 生成 arm64 未签名 `apps/desktop/out/FocusLit-darwin-arm64/FocusLit.app`（294 MiB），核对 asar 含设置 IPC、恢复守卫及六张猫咪 PNG。macOS 26.6.2 上通过 CUA 启动该包并检查中文主面板/设置页截图；未修改用户语言偏好。新 profile 首启、英文切换、重启保留的完整实机验收仍待完成。代码未提交，里程碑未完成；无 API/云成本。
 
 **报告成为正式的下一条产品价值线，但不先做四套图表。** 先写出最小 `SessionSummary` 的存储
 决策和失败模型，再实现单个“今日专注”纵向切片：结束时记录可空目标、开始/结束、实际 running

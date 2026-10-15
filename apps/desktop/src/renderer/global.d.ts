@@ -2,6 +2,8 @@ import type {
   BridgeStatusView,
   SessionCommand,
   SessionViewDto,
+  SettingsUpdate,
+  SettingsView,
 } from "@focuslit/contracts";
 import type { CloseTestTabResult } from "../preload";
 
@@ -18,6 +20,8 @@ declare global {
       getBridgeStatus(): Promise<BridgeStatusView>;
       onBridgeChanged(callback: (status: BridgeStatusView) => void): () => void;
       closeTestTab(): Promise<CloseTestTabResult>;
+      getSettings(): Promise<SettingsView>;
+      updateSettings(update: SettingsUpdate): Promise<SettingsView>;
     };
   }
 }

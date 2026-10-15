@@ -4,9 +4,13 @@ import {
   bridgeStatusViewSchema,
   sessionCommandSchema,
   sessionViewSchema,
+  settingsUpdateSchema,
+  settingsViewSchema,
   type BridgeStatusView,
   type SessionCommand,
   type SessionViewDto,
+  type SettingsUpdate,
+  type SettingsView,
 } from "@focuslit/contracts";
 
 // Local to the desktop<->renderer IPC boundary only — not part of the
@@ -56,6 +60,15 @@ const api = {
     ipcRenderer.on("bridge:changed", listener);
     return () => ipcRenderer.removeListener("bridge:changed", listener);
   },
+  getSettings: async (): Promise<SettingsView> =>
+    settingsViewSchema.parse(await ipcRenderer.invoke("settings:get")),
+  updateSettings: async (update: SettingsUpdate): Promise<SettingsView> =>
+    settingsViewSchema.parse(
+      await ipcRenderer.invoke(
+        "settings:update",
+        settingsUpdateSchema.parse(update),
+      ),
+    ),
   closeTestTab: async (): Promise<CloseTestTabResult> =>
     closeTestTabResultSchema.parse(
       await ipcRenderer.invoke("bridge:closeTestTab"),

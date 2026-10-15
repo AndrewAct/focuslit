@@ -312,6 +312,66 @@ footer {
 .status-dot.connected {
   background: #476b58;
 }
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  color: #68615b;
+  background: transparent;
+}
+.icon-button:hover {
+  background: #ece7e0;
+}
+.back-button {
+  min-height: auto;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings h1 {
+  margin-bottom: 6px;
+}
+.settings .toggle-group button {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+.first-run {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+}
+.first-run h1 {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 21px;
+  margin: 14px 0 20px;
+}
+.language-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.first-run-note {
+  display: flex;
+  flex-direction: column;
+  margin: 16px 0 0;
+  color: #68615b;
+  font-size: 12px;
+}
+
 .close-experiment {
   margin-top: 10px;
 }
@@ -345,8 +405,13 @@ footer {
   }
   .timer-toggle,
   .close-result,
+  .icon-button,
+  .first-run-note,
   footer {
     color: #d1c5b8;
+  }
+  .icon-button:hover {
+    background: #3d3834;
   }
   .eyebrow,
   .error {
