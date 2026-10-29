@@ -38,7 +38,7 @@ export const initialSession: SessionState = {
   revision: 0,
 };
 
-function elapsedAt(state: SessionState, atMs: number): number {
+export function elapsedAt(state: SessionState, atMs: number): number {
   if (state.phase !== "running" || state.startedAtMs === null)
     return state.elapsedMs;
   // A wall-clock rollback must never increase or erase active time.

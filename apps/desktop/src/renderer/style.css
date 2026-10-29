@@ -107,9 +107,12 @@ input:focus-visible {
 .cat-wrap:focus {
   outline: none;
 }
+/* Keyboard-only focus cue for the cat. A soft rounded halo reads as part of
+   the pet instead of a hard rectangular box around the sprite. */
 .cat-wrap:focus-visible {
-  outline: 3px solid #8a541f;
-  outline-offset: 2px;
+  outline: none;
+  border-radius: 16px;
+  box-shadow: 0 0 0 2px rgba(138, 84, 31, 0.35);
 }
 .surface.card .cat-wrap {
   width: auto;
@@ -218,11 +221,10 @@ h1 {
   letter-spacing: -0.04em;
   margin: 0 0 20px;
 }
-.completion-summary {
-  color: #476b58;
-  font-size: 15px;
-  font-weight: 650;
-  margin: -8px 0 20px;
+.today-total {
+  color: #7a6e64;
+  font-size: 13px;
+  margin: -12px 0 16px;
 }
 form {
   display: flex;
@@ -417,8 +419,8 @@ footer {
   .error {
     color: #e5b685;
   }
-  .completion-summary {
-    color: #99c5a8;
+  .today-total {
+    color: #b3a79c;
   }
   input {
     border-color: #94887e;

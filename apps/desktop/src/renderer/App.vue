@@ -36,6 +36,8 @@ const session = ref<SessionViewDto>({
   durationMs: 0,
   remainingMs: 0,
   revision: 0,
+  todayFocusMs: 0,
+  focusLogStatus: "ok",
 });
 const bridgeStatus = ref<BridgeStatusView>({
   chrome: "not-installed",
@@ -74,7 +76,10 @@ const copy = computed(() =>
         paused: "已暂停",
         ended: "已完成",
         unnamedSession: "专注时段",
-        focusedFor: "已专注",
+        todayFocused: "今日已专注",
+        focusLogUnavailable: "历史记录暂不可用，新记录无法保存。",
+        focusLogSaveFailed: "专注记录尚未保存，正在重试；退出可能丢失。",
+        focusLogRecovered: "旧记录无法读取，已保留备份；当前从零累计。",
         browserChromeNotInstalled: "Chrome：扩展未安装",
         browserChromePending: "Chrome：已安装，等待连接",
         browserChromeConnected: "Chrome：已连接（仅测试页，只读）",
@@ -117,7 +122,13 @@ const copy = computed(() =>
         paused: "Paused",
         ended: "Session complete",
         unnamedSession: "Focus session",
-        focusedFor: "Focused",
+        todayFocused: "Focused today:",
+        focusLogUnavailable:
+          "History is unavailable. New records cannot be saved.",
+        focusLogSaveFailed:
+          "Focus records are not saved yet. Retrying; quitting may lose them.",
+        focusLogRecovered:
+          "Previous records could not be read. A backup was kept; totals start at zero.",
         browserChromeNotInstalled: "Chrome: extension not installed",
         browserChromePending: "Chrome: installed, waiting to connect",
         browserChromeConnected: "Chrome: connected (test page only, read-only)",
@@ -347,10 +358,8 @@ const remaining = computed(() => {
   const totalSeconds = Math.ceil(session.value.remainingMs / 1000);
   return `${String(Math.floor(totalSeconds / 60)).padStart(2, "0")}:${String(totalSeconds % 60).padStart(2, "0")}`;
 });
-const focusedDuration = computed(() => {
-  const totalSeconds = Math.floor(
-    Math.max(0, session.value.durationMs - session.value.remainingMs) / 1000,
-  );
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   if (locale.value === "zh") {
@@ -362,7 +371,10 @@ const focusedDuration = computed(() => {
     : minutes > 0
       ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
       : `${totalSeconds} ${totalSeconds === 1 ? "second" : "seconds"}`;
-});
+}
+const todayFocusedDuration = computed(() =>
+  formatDuration(session.value.todayFocusMs),
+);
 
 const closeResultText = computed(() => {
   if (closeRequestError.value === "not-connected")
@@ -662,8 +674,17 @@ onUnmounted(() => {
         >
           {{ remaining }}
         </p>
-        <p v-else-if="session.phase === 'ended'" class="completion-summary">
-          {{ copy.focusedFor }} {{ focusedDuration }}
+        <p class="today-total">
+          {{ copy.todayFocused }} {{ todayFocusedDuration }}
+        </p>
+        <p v-if="session.focusLogStatus !== 'ok'" class="error" role="status">
+          {{
+            session.focusLogStatus === "unavailable"
+              ? copy.focusLogUnavailable
+              : session.focusLogStatus === "save-failed"
+                ? copy.focusLogSaveFailed
+                : copy.focusLogRecovered
+          }}
         </p>
 
         <form

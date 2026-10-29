@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/session.ts",
-    "./companion-actions": "./src/companion-actions.ts"
+    "./companion-actions": "./src/companion-actions.ts",
+    "./focus-ledger": "./src/focus-ledger.ts"
   }
 }

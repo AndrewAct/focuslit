@@ -7,7 +7,16 @@ import {
   settingsUpdateSchema,
 } from "@focuslit/contracts";
 import { initialSession, sessionView, transition } from "@focuslit/core";
+import {
+  creditFocus,
+  emptyLedger,
+  focusOnDay,
+  initialCursor,
+  localDayKey,
+  type FocusSample,
+} from "@focuslit/core/focus-ledger";
 import { BridgeServer } from "./bridge/server";
+import { FocusLogStore } from "./focus-log/store";
 import { SettingsStore } from "./settings/store";
 
 // Forces app.getPath("userData") to "~/Library/Application Support/FocusLit"
@@ -24,16 +33,67 @@ const WINDOW_SIZES: Record<WindowMode, { width: number; height: number }> = {
   expanded: { width: 320, height: 460 },
 };
 const EDGE_MARGIN = 24;
+// While running, unsaved focus time is flushed at least this often, bounding
+// what a crash or power loss can lose. Pause/end/quit flush immediately.
+const FOCUS_LOG_SAVE_INTERVAL_MS = 60_000;
 
 let mainWindow: BrowserWindow | null = null;
 let state = initialSession;
+let ledger = emptyLedger;
+let focusCursor = initialCursor;
+let ledgerDirty = false;
+let ledgerSavedAtMs = 0;
+let focusLogStatus: "ok" | "unavailable" | "save-failed" | "recovered" = "ok";
+const focusLogStore = new FocusLogStore(app.getPath("userData"));
 const settingsStore = new SettingsStore(app.getPath("userData"));
 const bridgeServer = new BridgeServer(app.getPath("userData"), () =>
   publishBridgeStatus(),
 );
 
 function currentView() {
-  return sessionView(state, performance.now());
+  return {
+    ...sessionView(state, performance.now()),
+    todayFocusMs: focusOnDay(ledger, localDayKey(Date.now())),
+    focusLogStatus,
+  };
+}
+
+// Pair wall time (calendar placement) with monotonic time (active duration).
+function focusSample(): FocusSample {
+  return {
+    monotonicMs: performance.now(),
+    wallMs: Date.now(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}
+
+function accrueFocus(
+  options: { flush: boolean; quit?: boolean },
+  sample = focusSample(),
+) {
+  const atMs = sample.monotonicMs;
+  const next = creditFocus(ledger, focusCursor, state, sample, options.quit);
+  focusCursor = next.cursor;
+  if (next.ledger !== ledger) {
+    ledger = next.ledger;
+    ledgerDirty = true;
+  }
+  if (
+    ledgerDirty &&
+    (options.flush ||
+      state.phase !== "running" ||
+      atMs - ledgerSavedAtMs >= FOCUS_LOG_SAVE_INTERVAL_MS)
+  ) {
+    if (focusLogStore.save(ledger)) {
+      ledgerDirty = false;
+      if (focusLogStatus === "save-failed") focusLogStatus = "ok";
+    } else if (focusLogStatus !== "unavailable") {
+      focusLogStatus = "save-failed";
+    }
+    // A failed save stays dirty and is retried at the next save opportunity;
+    // the UI distinguishes the in-memory total from persisted history.
+    ledgerSavedAtMs = atMs;
+  }
 }
 
 // A BrowserWindow can outlive the renderer frame briefly (notably while Vite
@@ -145,6 +205,22 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const focusLog = focusLogStore.load();
+  ledger = focusLog.ledger;
+  ledgerDirty = focusLog.outcome === "migrated";
+  if (
+    focusLog.outcome === "unsupported-version" ||
+    focusLog.outcome === "recovery-failed"
+  ) {
+    focusLogStatus = "unavailable";
+  } else if (focusLog.outcome === "quarantined") {
+    focusLogStatus = "recovered";
+  }
+  if (focusLogStatus !== "ok") {
+    console.warn(
+      `FocusLit: focus-log.json unavailable (${focusLog.outcome}); today's total starts from zero.`,
+    );
+  }
   const settingsOutcome = settingsStore.load();
   if (settingsOutcome === "quarantined") {
     console.warn(
@@ -198,7 +274,9 @@ app.whenReady().then(() => {
   ipcMain.handle("session:command", (event, raw: unknown) => {
     if (!authorized(event)) throw new Error("Unauthorized IPC sender");
     const command = sessionCommandSchema.parse(raw);
-    const atMs = performance.now();
+    const sample = focusSample();
+    const atMs = sample.monotonicMs;
+    accrueFocus({ flush: false }, sample);
     switch (command.type) {
       case "start":
         state = transition(state, {
@@ -212,14 +290,18 @@ app.whenReady().then(() => {
       default:
         state = transition(state, { type: command.type, atMs });
     }
+    accrueFocus({ flush: false }, sample);
     publish();
     return currentView();
   });
   powerMonitor.on("suspend", pauseForSystem);
   powerMonitor.on("lock-screen", pauseForSystem);
   setInterval(() => {
-    const next = transition(state, { type: "tick", atMs: performance.now() });
+    const sample = focusSample();
+    accrueFocus({ flush: false }, sample);
+    const next = transition(state, { type: "tick", atMs: sample.monotonicMs });
     if (next !== state) state = next;
+    accrueFocus({ flush: false }, sample);
     publish();
   }, 1000);
   createWindow();
@@ -229,10 +311,16 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("will-quit", () => bridgeServer.stop());
+app.on("will-quit", () => {
+  accrueFocus({ flush: true, quit: true });
+  bridgeServer.stop();
+});
 
 function pauseForSystem() {
-  state = transition(state, { type: "pause", atMs: performance.now() });
+  const sample = focusSample();
+  accrueFocus({ flush: false }, sample);
+  state = transition(state, { type: "pause", atMs: sample.monotonicMs });
+  accrueFocus({ flush: false }, sample);
   publish();
 }
 
