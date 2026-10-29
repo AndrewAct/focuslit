@@ -21,6 +21,9 @@ export const sessionViewSchema = z.strictObject({
   remainingMs: z.number().nonnegative(),
   durationMs: z.number().nonnegative(),
   revision: z.number().int().nonnegative(),
+  // Active focus time credited to the current local day, across sessions.
+  todayFocusMs: z.number().nonnegative(),
+  focusLogStatus: z.enum(["ok", "unavailable", "save-failed", "recovered"]),
 });
 
 export type SessionViewDto = z.infer<typeof sessionViewSchema>;
